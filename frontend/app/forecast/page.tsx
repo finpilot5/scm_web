@@ -22,6 +22,19 @@ type PlanRow = {
   orderDate: string;
 };
 
+type CalendarTodo = {
+  id: string;
+  productId: number;
+  productName: string;
+  type: "order" | "production" | "demand";
+  date: string;
+  label: string;
+  qty: number;
+  projectedInventory: number;
+};
+
+const FORECAST_TODOS_KEY = "scm_forecast_calendar_todos";
+
 function toISO(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
     d.getDate()
@@ -172,6 +185,54 @@ export default function ForecastPage() {
     [scheduleRows]
   );
 
+  const calendarTodos = useMemo<CalendarTodo[]>(() => {
+    if (!selectedProduct) return [];
+    const rows: CalendarTodo[] = [];
+    for (const r of scheduleRows) {
+      rows.push({
+        id: `${selectedProduct.id}-${r.label}-order`,
+        productId: selectedProduct.id,
+        productName: selectedProduct.name,
+        type: "order",
+        date: r.orderDate,
+        label: `${r.label} 원부자재 발주`,
+        qty: r.order,
+        projectedInventory: r.projectedInventory,
+      });
+      rows.push({
+        id: `${selectedProduct.id}-${r.label}-prod`,
+        productId: selectedProduct.id,
+        productName: selectedProduct.name,
+        type: "production",
+        date: r.productionDate,
+        label: `${r.label} 생산`,
+        qty: r.production,
+        projectedInventory: r.projectedInventory,
+      });
+      rows.push({
+        id: `${selectedProduct.id}-${r.label}-demand`,
+        productId: selectedProduct.id,
+        productName: selectedProduct.name,
+        type: "demand",
+        date: r.demandDate,
+        label: `${r.label} 판매예측`,
+        qty: r.demand,
+        projectedInventory: r.projectedInventory,
+      });
+    }
+    return rows;
+  }, [scheduleRows, selectedProduct]);
+
+  const syncToCalendar = () => {
+    if (!selectedProduct) {
+      setMessage("상품을 선택한 뒤 캘린더 연동을 진행하세요.");
+      return;
+    }
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(FORECAST_TODOS_KEY, JSON.stringify(calendarTodos));
+    setMessage(`캘린더 일정 생성 완료 (${calendarTodos.length}건). Calendar 화면에서 확인하세요.`);
+  };
+
   return (
     <div className="space-y-6 py-4">
       <h1 className="text-3xl font-semibold">Forecast (SCM 계산 모듈)</h1>
@@ -248,6 +309,16 @@ export default function ForecastPage() {
           onChange={(e) => setMaterialLeadDays(Number(e.target.value || 0))}
           placeholder="원부자재 리드타임(일)"
         />
+      </div>
+
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={syncToCalendar}
+          className="rounded-xl bg-stock px-4 py-2 text-sm font-medium text-white"
+        >
+          Forecast 결과를 Calendar 일정으로 생성
+        </button>
       </div>
 
       <div className="grid gap-3 md:grid-cols-4">

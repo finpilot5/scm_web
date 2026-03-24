@@ -17,6 +17,19 @@ type ManualInput = {
   replenishment: number;
 };
 
+type ForecastTodo = {
+  id: string;
+  productId: number;
+  productName: string;
+  type: "order" | "production" | "demand";
+  date: string;
+  label: string;
+  qty: number;
+  projectedInventory: number;
+};
+
+const FORECAST_TODOS_KEY = "scm_forecast_calendar_todos";
+
 const inputClass =
   "h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 shadow-soft outline-none focus:border-stock";
 
@@ -66,6 +79,7 @@ export default function CalendarPage() {
   const [message, setMessage] = useState<string>("");
   const [result, setResult] = useState<Generate52wResponse | null>(null);
   const [manualInputs, setManualInputs] = useState<Record<string, ManualInput>>({});
+  const [forecastTodos, setForecastTodos] = useState<ForecastTodo[]>([]);
 
   const products = useMemo(() => items.filter((i) => i.type === "PRODUCT"), [items]);
   const monthGrid = useMemo(() => buildMonthGrid(monthDate), [monthDate]);
@@ -112,6 +126,21 @@ export default function CalendarPage() {
       .catch(() => {
         // 로그인/네트워크 실패는 생성 시 메시지로 안내
       });
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = window.localStorage.getItem(FORECAST_TODOS_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as ForecastTodo[];
+      if (Array.isArray(parsed)) {
+        setForecastTodos(parsed);
+        setMessage((prev) => prev || `Forecast 연동 일정 ${parsed.length}건을 불러왔습니다.`);
+      }
+    } catch {
+      // ignore parse error
+    }
   }, []);
 
   const moveMonth = (delta: number) => {
@@ -298,6 +327,41 @@ export default function CalendarPage() {
                     </tr>
                   );
                 })}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+
+        {forecastTodos.length > 0 ? (
+          <div className="mt-4 overflow-auto rounded-lg border border-slate-200">
+            <div className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
+              Forecast 연동 To-Do 일정
+            </div>
+            <table className="min-w-[900px] w-full text-sm">
+              <thead className="bg-slate-50 text-slate-700">
+                <tr>
+                  <th className="p-2 text-left">일자</th>
+                  <th className="p-2 text-left">상품</th>
+                  <th className="p-2 text-left">유형</th>
+                  <th className="p-2 text-left">일정</th>
+                  <th className="p-2 text-right">수량</th>
+                  <th className="p-2 text-right">예상 재고</th>
+                </tr>
+              </thead>
+              <tbody>
+                {forecastTodos
+                  .slice()
+                  .sort((a, b) => a.date.localeCompare(b.date))
+                  .map((t) => (
+                    <tr key={t.id} className="border-t border-slate-100">
+                      <td className="p-2">{t.date}</td>
+                      <td className="p-2">{t.productName}</td>
+                      <td className="p-2">{t.type}</td>
+                      <td className="p-2">{t.label}</td>
+                      <td className="p-2 text-right">{t.qty.toFixed(2)}</td>
+                      <td className="p-2 text-right">{t.projectedInventory.toFixed(2)}</td>
+                    </tr>
+                  ))}
               </tbody>
             </table>
           </div>
