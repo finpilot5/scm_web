@@ -52,6 +52,11 @@ function clampNonNegative(n: number): number {
   return Number.isFinite(n) ? Math.max(0, n) : 0;
 }
 
+function parseNum(input: string, fallback = 0): number {
+  const n = Number(input);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 export default function ForecastPage() {
   const [items, setItems] = useState<Item[]>([]);
   const [boms, setBoms] = useState<BomRecord[]>([]);
@@ -61,15 +66,15 @@ export default function ForecastPage() {
 
   const [productId, setProductId] = useState<number>(0);
   const [periodDays, setPeriodDays] = useState<number>(30);
-  const [avgDailySales, setAvgDailySales] = useState<number>(10);
-  const [trendPct, setTrendPct] = useState<number>(0);
-  const [seasonalityPct, setSeasonalityPct] = useState<number>(0);
-  const [seasonalityByMonth, setSeasonalityByMonth] = useState<number[]>(
-    () => new Array(12).fill(0)
+  const [avgDailySalesInput, setAvgDailySalesInput] = useState<string>("10");
+  const [trendPctInput, setTrendPctInput] = useState<string>("0");
+  const [seasonalityPctInput, setSeasonalityPctInput] = useState<string>("0");
+  const [seasonalityByMonthInput, setSeasonalityByMonthInput] = useState<string[]>(
+    () => new Array(12).fill("0")
   );
-  const [safetyStock, setSafetyStock] = useState<number>(20);
-  const [productionLeadDays, setProductionLeadDays] = useState<number>(5);
-  const [materialLeadDays, setMaterialLeadDays] = useState<number>(20);
+  const [safetyStockInput, setSafetyStockInput] = useState<string>("20");
+  const [productionLeadDaysInput, setProductionLeadDaysInput] = useState<string>("5");
+  const [materialLeadDaysInput, setMaterialLeadDaysInput] = useState<string>("20");
 
   useEffect(() => {
     const load = async () => {
@@ -106,6 +111,13 @@ export default function ForecastPage() {
   }, [inventories]);
 
   const currentProductStock = selectedProduct ? itemStockMap.get(selectedProduct.id) ?? 0 : 0;
+  const avgDailySales = parseNum(avgDailySalesInput, 0);
+  const trendPct = parseNum(trendPctInput, 0);
+  const seasonalityPct = parseNum(seasonalityPctInput, 0);
+  const seasonalityByMonth = seasonalityByMonthInput.map((v) => parseNum(v, 0));
+  const safetyStock = parseNum(safetyStockInput, 0);
+  const productionLeadDays = parseNum(productionLeadDaysInput, 0);
+  const materialLeadDays = parseNum(materialLeadDaysInput, 0);
 
   const scheduleRows = useMemo<PlanRow[]>(() => {
     const buckets = Math.max(1, Math.ceil(periodDays / 7));
@@ -319,8 +331,8 @@ export default function ForecastPage() {
             <input
               type="number"
               className={inputClass}
-              value={avgDailySales}
-              onChange={(e) => setAvgDailySales(Number(e.target.value || 0))}
+              value={avgDailySalesInput}
+              onChange={(e) => setAvgDailySalesInput(e.target.value)}
             />
           </label>
           <label className="block text-sm">
@@ -328,8 +340,8 @@ export default function ForecastPage() {
             <input
               type="number"
               className={inputClass}
-              value={safetyStock}
-              onChange={(e) => setSafetyStock(Number(e.target.value || 0))}
+              value={safetyStockInput}
+              onChange={(e) => setSafetyStockInput(e.target.value)}
             />
           </label>
           <label className="block text-sm">
@@ -337,8 +349,8 @@ export default function ForecastPage() {
             <input
               type="number"
               className={inputClass}
-              value={trendPct}
-              onChange={(e) => setTrendPct(Number(e.target.value || 0))}
+              value={trendPctInput}
+              onChange={(e) => setTrendPctInput(e.target.value)}
             />
           </label>
           <label className="block text-sm">
@@ -346,8 +358,8 @@ export default function ForecastPage() {
             <input
               type="number"
               className={inputClass}
-              value={seasonalityPct}
-              onChange={(e) => setSeasonalityPct(Number(e.target.value || 0))}
+              value={seasonalityPctInput}
+              onChange={(e) => setSeasonalityPctInput(e.target.value)}
             />
           </label>
           <label className="block text-sm">
@@ -355,8 +367,8 @@ export default function ForecastPage() {
             <input
               type="number"
               className={inputClass}
-              value={productionLeadDays}
-              onChange={(e) => setProductionLeadDays(Number(e.target.value || 0))}
+              value={productionLeadDaysInput}
+              onChange={(e) => setProductionLeadDaysInput(e.target.value)}
             />
           </label>
           <label className="block text-sm">
@@ -364,8 +376,8 @@ export default function ForecastPage() {
             <input
               type="number"
               className={inputClass}
-              value={materialLeadDays}
-              onChange={(e) => setMaterialLeadDays(Number(e.target.value || 0))}
+              value={materialLeadDaysInput}
+              onChange={(e) => setMaterialLeadDaysInput(e.target.value)}
             />
           </label>
         </div>
@@ -384,12 +396,12 @@ export default function ForecastPage() {
               <input
                 type="number"
                 className={inputClass}
-                value={seasonalityByMonth[idx] ?? 0}
+                value={seasonalityByMonthInput[idx] ?? "0"}
                 onChange={(e) => {
-                  const v = Number(e.target.value || 0);
-                  setSeasonalityByMonth((prev) => {
+                  const v = e.target.value;
+                  setSeasonalityByMonthInput((prev) => {
                     const next = [...prev];
-                    next[idx] = Number.isFinite(v) ? v : 0;
+                    next[idx] = v;
                     return next;
                   });
                 }}

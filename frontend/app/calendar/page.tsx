@@ -13,8 +13,8 @@ type DayMetrics = {
 };
 
 type ManualInput = {
-  actualOrder: number;
-  replenishment: number;
+  actualOrder: string;
+  replenishment: string;
 };
 
 type ForecastTodo = {
@@ -108,14 +108,14 @@ export default function CalendarPage() {
   const onManualChange = (
     dayKey: string,
     field: "actualOrder" | "replenishment",
-    value: number
+    value: string
   ) => {
     setManualInputs((prev) => ({
       ...prev,
       [dayKey]: {
-        actualOrder: prev[dayKey]?.actualOrder ?? 0,
-        replenishment: prev[dayKey]?.replenishment ?? 0,
-        [field]: Number.isFinite(value) ? value : 0,
+        actualOrder: prev[dayKey]?.actualOrder ?? "",
+        replenishment: prev[dayKey]?.replenishment ?? "",
+        [field]: value,
       },
     }));
   };
@@ -297,8 +297,8 @@ export default function CalendarPage() {
                   const key = toDayKey(d);
                   const base = dayMetricsMap.get(key);
                   const manual = manualInputs[key];
-                  const actualOrder = manual?.actualOrder ?? base?.actualOrder ?? 0;
-                  const replenishment = manual?.replenishment ?? base?.replenishment ?? 0;
+                  const actualOrder = manual?.actualOrder ?? String(base?.actualOrder ?? 0);
+                  const replenishment = manual?.replenishment ?? String(base?.replenishment ?? 0);
                   return (
                     <tr key={`row-${key}`} className="border-t border-slate-100">
                       <td className="p-2">{key}</td>
@@ -310,7 +310,7 @@ export default function CalendarPage() {
                           className="h-8 w-28 rounded-lg border border-slate-200 px-2 text-right"
                           value={actualOrder}
                           onChange={(e) =>
-                            onManualChange(key, "actualOrder", Number(e.target.value || 0))
+                            onManualChange(key, "actualOrder", e.target.value)
                           }
                         />
                       </td>
@@ -320,7 +320,7 @@ export default function CalendarPage() {
                           className="h-8 w-28 rounded-lg border border-slate-200 px-2 text-right"
                           value={replenishment}
                           onChange={(e) =>
-                            onManualChange(key, "replenishment", Number(e.target.value || 0))
+                            onManualChange(key, "replenishment", e.target.value)
                           }
                         />
                       </td>
