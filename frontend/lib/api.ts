@@ -267,7 +267,7 @@ async function parseError(res: Response): Promise<string> {
         detailLower.includes("forbidden") ||
         j.detail.includes("접근할 권한이 없습니다")
       ) {
-        return "권한이 부족합니다. Settings에서 회원가입 + 로그인(ADMIN) 후 다시 시도해 주세요.";
+        return "접근 오류가 발생했습니다. Settings에서 다시 로그인 후 재시도해 주세요.";
       }
       if (
         detailLower.includes("not authenticated") ||

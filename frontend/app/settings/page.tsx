@@ -60,7 +60,7 @@ export default function SettingsPage() {
       await loginAndStoreToken(email, password);
       await fetchMe();
       setHasToken(true);
-      setMessage("회원가입 및 로그인 완료(ADMIN 권한). 이제 등록 작업을 진행할 수 있습니다.");
+      setMessage("회원가입 및 로그인 완료. 이제 등록 작업을 진행할 수 있습니다.");
       e.currentTarget.reset();
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "회원가입 실패");
@@ -86,7 +86,7 @@ export default function SettingsPage() {
       ) : null}
 
       <form onSubmit={onRegister} className="grid gap-3 rounded-2xl border bg-white p-4 shadow-soft md:max-w-xl">
-        <div className="text-sm font-medium text-slate-700">회원가입 (권한 자동 부여)</div>
+        <div className="text-sm font-medium text-slate-700">회원가입</div>
         <input name="name" placeholder="이름" className="h-10 rounded-xl border border-slate-200 px-3 text-sm" />
         <input name="email" type="email" placeholder="이메일" className="h-10 rounded-xl border border-slate-200 px-3 text-sm" />
         <input

@@ -109,11 +109,7 @@ def get_current_user(
 
 def require_role(*roles: str):
     def dependency(current_user: User = Depends(get_current_user)) -> User:
-        if roles and current_user.role not in roles:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="해당 기능에 접근할 권한이 없습니다.",
-            )
+        # MVP 정책: 계정만 유효하면 모든 기능 접근 허용
         return current_user
 
     return dependency
