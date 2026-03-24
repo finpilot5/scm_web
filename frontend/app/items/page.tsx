@@ -40,15 +40,13 @@ export default function ItemsPage() {
     const name = String(fd.get("name") || "").trim();
     const type = String(fd.get("type") || "").trim().toUpperCase();
     const uom = String(fd.get("uom") || "").trim();
-    const capaRaw = String(fd.get("production_capa_per_day") || "").trim();
-    const production_capa_per_day = capaRaw === "" ? null : Number(capaRaw);
 
     if (!code || !name || !type || !uom) {
       setMessage({ type: "err", text: "코드, 이름, 유형, 단위는 필수입니다." });
       return;
     }
-    if (type !== "PRODUCT") {
-      setMessage({ type: "err", text: "유형은 PRODUCT 여야 합니다." });
+    if (type !== "PRODUCT" && type !== "RAW") {
+      setMessage({ type: "err", text: "유형은 PRODUCT 또는 RAW 여야 합니다." });
       return;
     }
 
@@ -62,7 +60,7 @@ export default function ItemsPage() {
         lead_time_days: 0,
         production_leadtime_days: null,
         material_leadtime_days: null,
-        production_capa_per_day,
+        production_capa_per_day: null,
         shelf_life_days: null,
         is_active: true,
       });
@@ -144,6 +142,7 @@ export default function ItemsPage() {
               <span className="text-slate-600">유형 *</span>
               <select name="type" className={inputClass} required defaultValue="PRODUCT">
                 <option value="PRODUCT">PRODUCT (제품)</option>
+                <option value="RAW">RAW (원재료/부재료)</option>
               </select>
             </label>
             <label className="block text-sm">
@@ -155,10 +154,6 @@ export default function ItemsPage() {
                   </option>
                 ))}
               </select>
-            </label>
-            <label className="block text-sm">
-              <span className="text-slate-600">생산 CAPA / 일</span>
-              <input name="production_capa_per_day" type="number" className={inputClass} min={0} step="any" />
             </label>
           </div>
           <button
