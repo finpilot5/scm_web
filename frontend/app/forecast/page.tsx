@@ -1,44 +1,351 @@
-﻿"use client";
+"use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+
+import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+
+import { fetchBoms, fetchInventories, fetchItems } from "@/lib/api";
+import type { BomRecord, InventoryRecord, Item } from "@/lib/types";
+
+const inputClass =
+  "h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 shadow-soft outline-none focus:border-stock";
+
+type PlanRow = {
+  label: string;
+  dayIndex: number;
+  demand: number;
+  production: number;
+  order: number;
+  projectedInventory: number;
+  demandDate: string;
+  productionDate: string;
+  orderDate: string;
+};
+
+function toISO(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate()
+  ).padStart(2, "0")}`;
+}
+
+function addDays(base: Date, days: number): Date {
+  const d = new Date(base);
+  d.setDate(d.getDate() + days);
+  return d;
+}
+
+function clampNonNegative(n: number): number {
+  return Number.isFinite(n) ? Math.max(0, n) : 0;
+}
 
 export default function ForecastPage() {
-  const [product, setProduct] = useState("Chocolate Cake");
-  const [rows] = useState([
-    { week: 1, qty: 100 },
-    { week: 2, qty: 120 },
-    { week: 3, qty: 90 },
-    { week: 4, qty: 110 },
+  const [items, setItems] = useState<Item[]>([]);
+  const [boms, setBoms] = useState<BomRecord[]>([]);
+  const [inventories, setInventories] = useState<InventoryRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState<string>("");
+
+  const [productId, setProductId] = useState<number>(0);
+  const [periodDays, setPeriodDays] = useState<number>(30);
+  const [avgDailySales, setAvgDailySales] = useState<number>(10);
+  const [trendPct, setTrendPct] = useState<number>(0);
+  const [seasonalityPct, setSeasonalityPct] = useState<number>(0);
+  const [safetyStock, setSafetyStock] = useState<number>(20);
+  const [productionLeadDays, setProductionLeadDays] = useState<number>(5);
+  const [materialLeadDays, setMaterialLeadDays] = useState<number>(20);
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      try {
+        const [it, bm, inv] = await Promise.all([fetchItems(), fetchBoms(), fetchInventories()]);
+        setItems(it);
+        setBoms(bm);
+        setInventories(inv);
+        const firstProduct = it.find((x) => x.type === "PRODUCT");
+        if (firstProduct) setProductId(firstProduct.id);
+      } catch (err) {
+        setMessage(err instanceof Error ? err.message : "Forecast 초기 데이터 로딩 실패");
+      } finally {
+        setLoading(false);
+      }
+    };
+    void load();
+  }, []);
+
+  const products = useMemo(() => items.filter((i) => i.type === "PRODUCT"), [items]);
+  const raws = useMemo(() => items.filter((i) => i.type === "RAW"), [items]);
+  const selectedProduct = useMemo(
+    () => products.find((p) => p.id === productId) ?? null,
+    [products, productId]
+  );
+
+  const itemStockMap = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const inv of inventories) {
+      map.set(inv.item_id, (map.get(inv.item_id) ?? 0) + Number(inv.qty || 0));
+    }
+    return map;
+  }, [inventories]);
+
+  const currentProductStock = selectedProduct ? itemStockMap.get(selectedProduct.id) ?? 0 : 0;
+
+  const demandFactor = 1 + trendPct / 100 + seasonalityPct / 100;
+  const forecastSales = clampNonNegative(avgDailySales * periodDays * demandFactor);
+  const requiredProduction = clampNonNegative(forecastSales - currentProductStock + safetyStock);
+
+  const bomForProduct = useMemo(
+    () => boms.filter((b) => b.parent_item_id === productId),
+    [boms, productId]
+  );
+
+  const materialOrders = useMemo(() => {
+    return bomForProduct
+      .map((b) => {
+        const material = raws.find((r) => r.id === b.child_item_id) ?? items.find((r) => r.id === b.child_item_id);
+        const required = clampNonNegative(requiredProduction * Number(b.qty_per || 0));
+        const stock = itemStockMap.get(b.child_item_id) ?? 0;
+        const order = clampNonNegative(required - stock);
+        return {
+          materialId: b.child_item_id,
+          materialName: material ? material.name : `ITEM-${b.child_item_id}`,
+          unit: material?.uom ?? "EA",
+          required,
+          stock,
+          order,
+        };
+      })
+      .filter((x) => x.required > 0 || x.order > 0);
+  }, [bomForProduct, raws, items, requiredProduction, itemStockMap]);
+
+  const scheduleRows = useMemo<PlanRow[]>(() => {
+    const buckets = Math.max(1, Math.ceil(periodDays / 7));
+    const base = new Date();
+    const rows: PlanRow[] = [];
+    let projectedInventory = currentProductStock;
+    for (let i = 0; i < buckets; i += 1) {
+      const start = i * 7;
+      const end = Math.min(periodDays, start + 7);
+      const span = Math.max(1, end - start);
+      const weekDemand = clampNonNegative(avgDailySales * span * demandFactor);
+      const remaining = buckets - i;
+      const weekProduction =
+        remaining === 1
+          ? clampNonNegative(requiredProduction - rows.reduce((acc, r) => acc + r.production, 0))
+          : clampNonNegative(requiredProduction / buckets);
+      projectedInventory = projectedInventory - weekDemand + weekProduction;
+      const demandDate = addDays(base, end);
+      const productionDate = addDays(demandDate, -productionLeadDays);
+      const orderDate = addDays(productionDate, -materialLeadDays);
+      rows.push({
+        label: `W${i + 1}`,
+        dayIndex: end,
+        demand: Number(weekDemand.toFixed(2)),
+        production: Number(weekProduction.toFixed(2)),
+        order: Number((weekProduction * (materialOrders[0]?.order ? materialOrders[0].order / Math.max(requiredProduction, 1) : 0)).toFixed(2)),
+        projectedInventory: Number(projectedInventory.toFixed(2)),
+        demandDate: toISO(demandDate),
+        productionDate: toISO(productionDate),
+        orderDate: toISO(orderDate),
+      });
+    }
+    return rows;
+  }, [
+    periodDays,
+    avgDailySales,
+    demandFactor,
+    currentProductStock,
+    requiredProduction,
+    productionLeadDays,
+    materialLeadDays,
+    materialOrders,
   ]);
 
-  const total = useMemo(() => rows.reduce((acc, r) => acc + r.qty, 0), [rows]);
+  const chartData = useMemo(
+    () =>
+      scheduleRows.map((r) => ({
+        label: r.label,
+        실제판매: Number(r.demand.toFixed(2)),
+        예측판매: Number(r.demand.toFixed(2)),
+        재고: Number(r.projectedInventory.toFixed(2)),
+      })),
+    [scheduleRows]
+  );
 
   return (
     <div className="space-y-6 py-4">
-      <h1 className="text-3xl font-semibold">Demand Forecast</h1>
-      <div className="rounded-2xl border bg-white p-4 shadow-soft">
-        <label className="text-sm text-slate-600">Product selector</label>
-        <input value={product} onChange={(e) => setProduct(e.target.value)} className="mt-1 h-10 w-full rounded-xl border border-slate-200 px-3 text-sm" />
+      <h1 className="text-3xl font-semibold">Forecast (SCM 계산 모듈)</h1>
+
+      {loading ? (
+        <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
+          초기 데이터를 불러오는 중입니다...
+        </div>
+      ) : null}
+
+      {message ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          {message}
+        </div>
+      ) : null}
+
+      <div className="grid gap-3 rounded-2xl border bg-white p-4 shadow-soft md:grid-cols-4">
+        <select
+          className={inputClass}
+          value={productId || ""}
+          onChange={(e) => setProductId(Number(e.target.value || 0))}
+        >
+          <option value="">상품 선택</option>
+          {products.map((p) => (
+            <option key={p.id} value={p.id}>
+              [{p.code}] {p.name}
+            </option>
+          ))}
+        </select>
+        <select className={inputClass} value={periodDays} onChange={(e) => setPeriodDays(Number(e.target.value))}>
+          <option value={30}>30 days</option>
+          <option value={60}>60 days</option>
+          <option value={90}>90 days</option>
+        </select>
+        <input
+          type="number"
+          className={inputClass}
+          value={avgDailySales}
+          onChange={(e) => setAvgDailySales(Number(e.target.value || 0))}
+          placeholder="최근 일평균 판매량"
+        />
+        <input
+          type="number"
+          className={inputClass}
+          value={safetyStock}
+          onChange={(e) => setSafetyStock(Number(e.target.value || 0))}
+          placeholder="안전재고"
+        />
+        <input
+          type="number"
+          className={inputClass}
+          value={trendPct}
+          onChange={(e) => setTrendPct(Number(e.target.value || 0))}
+          placeholder="트렌드(%)"
+        />
+        <input
+          type="number"
+          className={inputClass}
+          value={seasonalityPct}
+          onChange={(e) => setSeasonalityPct(Number(e.target.value || 0))}
+          placeholder="시즌성(%)"
+        />
+        <input
+          type="number"
+          className={inputClass}
+          value={productionLeadDays}
+          onChange={(e) => setProductionLeadDays(Number(e.target.value || 0))}
+          placeholder="생산 리드타임(일)"
+        />
+        <input
+          type="number"
+          className={inputClass}
+          value={materialLeadDays}
+          onChange={(e) => setMaterialLeadDays(Number(e.target.value || 0))}
+          placeholder="원부자재 리드타임(일)"
+        />
       </div>
+
+      <div className="grid gap-3 md:grid-cols-4">
+        <div className="rounded-2xl border bg-white p-4 shadow-soft">
+          <p className="text-xs text-slate-500">예측 판매량</p>
+          <p className="text-2xl font-semibold">{forecastSales.toFixed(2)}</p>
+        </div>
+        <div className="rounded-2xl border bg-white p-4 shadow-soft">
+          <p className="text-xs text-slate-500">현재 재고</p>
+          <p className="text-2xl font-semibold">{currentProductStock.toFixed(2)}</p>
+        </div>
+        <div className="rounded-2xl border bg-white p-4 shadow-soft">
+          <p className="text-xs text-slate-500">필요 생산량</p>
+          <p className="text-2xl font-semibold">{requiredProduction.toFixed(2)}</p>
+        </div>
+        <div className="rounded-2xl border bg-white p-4 shadow-soft">
+          <p className="text-xs text-slate-500">원재료 발주 항목 수</p>
+          <p className="text-2xl font-semibold">{materialOrders.length}</p>
+        </div>
+      </div>
+
       <div className="rounded-2xl border bg-white p-4 shadow-soft">
+        <h2 className="mb-3 text-lg font-semibold">재고 시뮬레이션 (실판매/예측/재고)</h2>
+        <div className="h-72 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={chartData}>
+              <XAxis dataKey="label" />
+              <YAxis />
+              <Tooltip />
+              <Line type="monotone" dataKey="실제판매" stroke="#64748b" strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="예측판매" stroke="#2563eb" strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="재고" stroke="#16a34a" strokeWidth={3} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border bg-white p-4 shadow-soft">
+        <h2 className="mb-3 text-lg font-semibold">원부자재 발주 계산 (BOM)</h2>
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-slate-600">
             <tr>
-              <th className="p-2 text-left">Week</th>
-              <th className="p-2 text-left">Forecast Qty</th>
+              <th className="p-2 text-left">원부자재</th>
+              <th className="p-2 text-right">필요량</th>
+              <th className="p-2 text-right">현재 재고</th>
+              <th className="p-2 text-right">권장 발주량</th>
+              <th className="p-2 text-left">단위</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
-              <tr key={r.week} className="border-t">
-                <td className="p-2">{r.week}</td>
-                <td className="p-2">{r.qty}</td>
+            {materialOrders.map((m) => (
+              <tr key={m.materialId} className="border-t">
+                <td className="p-2">{m.materialName}</td>
+                <td className="p-2 text-right">{m.required.toFixed(2)}</td>
+                <td className="p-2 text-right">{m.stock.toFixed(2)}</td>
+                <td className="p-2 text-right">{m.order.toFixed(2)}</td>
+                <td className="p-2">{m.unit}</td>
               </tr>
             ))}
-            <tr className="border-t bg-slate-50 font-semibold">
-              <td className="p-2">합계</td>
-              <td className="p-2">{total}</td>
+            {materialOrders.length === 0 ? (
+              <tr className="border-t">
+                <td className="p-3 text-slate-500" colSpan={5}>
+                  BOM이 없거나 필요 생산량이 0입니다.
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="rounded-2xl border bg-white p-4 shadow-soft">
+        <h2 className="mb-3 text-lg font-semibold">일정/계획 테이블</h2>
+        <table className="w-full text-sm">
+          <thead className="bg-slate-50 text-slate-600">
+            <tr>
+              <th className="p-2 text-left">구간</th>
+              <th className="p-2 text-right">판매예측</th>
+              <th className="p-2 text-right">재고(예상)</th>
+              <th className="p-2 text-right">생산</th>
+              <th className="p-2 text-right">발주</th>
+              <th className="p-2 text-left">발주일</th>
+              <th className="p-2 text-left">생산일</th>
+              <th className="p-2 text-left">판매기준일</th>
             </tr>
+          </thead>
+          <tbody>
+            {scheduleRows.map((r) => (
+              <tr key={r.label} className="border-t">
+                <td className="p-2">{r.label}</td>
+                <td className="p-2 text-right">{r.demand.toFixed(2)}</td>
+                <td className="p-2 text-right">{r.projectedInventory.toFixed(2)}</td>
+                <td className="p-2 text-right">{r.production.toFixed(2)}</td>
+                <td className="p-2 text-right">{r.order.toFixed(2)}</td>
+                <td className="p-2">{r.orderDate}</td>
+                <td className="p-2">{r.productionDate}</td>
+                <td className="p-2">{r.demandDate}</td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
