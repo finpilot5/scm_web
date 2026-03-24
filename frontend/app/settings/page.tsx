@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 
-import { clearStoredToken, hasStoredToken, loginAndStoreToken } from "@/lib/api";
+import { clearStoredToken, hasStoredToken, loginAndStoreToken, registerUser } from "@/lib/api";
 
 export default function SettingsPage() {
   const [hasToken, setHasToken] = useState(false);
@@ -31,6 +31,27 @@ export default function SettingsPage() {
     }
   };
 
+  const onRegister = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const name = String(fd.get("name") || "").trim();
+    const email = String(fd.get("email") || "").trim();
+    const password = String(fd.get("password") || "").trim();
+    if (!name || !email || !password) {
+      setMessage("이름/이메일/비밀번호를 입력해 주세요.");
+      return;
+    }
+    try {
+      await registerUser({ name, email, password, role: "ADMIN" });
+      await loginAndStoreToken(email, password);
+      setHasToken(true);
+      setMessage("회원가입 및 로그인 완료(ADMIN 권한). 이제 등록 작업을 진행할 수 있습니다.");
+      e.currentTarget.reset();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "회원가입 실패");
+    }
+  };
+
   return (
     <div className="space-y-4 py-4">
       <h1 className="text-3xl font-semibold">Settings</h1>
@@ -49,7 +70,23 @@ export default function SettingsPage() {
         </div>
       ) : null}
 
+      <form onSubmit={onRegister} className="grid gap-3 rounded-2xl border bg-white p-4 shadow-soft md:max-w-xl">
+        <div className="text-sm font-medium text-slate-700">회원가입 (권한 자동 부여)</div>
+        <input name="name" placeholder="이름" className="h-10 rounded-xl border border-slate-200 px-3 text-sm" />
+        <input name="email" type="email" placeholder="이메일" className="h-10 rounded-xl border border-slate-200 px-3 text-sm" />
+        <input
+          name="password"
+          type="password"
+          placeholder="비밀번호"
+          className="h-10 rounded-xl border border-slate-200 px-3 text-sm"
+        />
+        <button type="submit" className="w-fit rounded-xl bg-stock px-4 py-2 text-white">
+          회원가입 + 로그인
+        </button>
+      </form>
+
       <form onSubmit={onLogin} className="grid gap-3 rounded-2xl border bg-white p-4 shadow-soft md:max-w-xl">
+        <div className="text-sm font-medium text-slate-700">기존 계정 로그인</div>
         <input name="email" type="email" placeholder="이메일" className="h-10 rounded-xl border border-slate-200 px-3 text-sm" />
         <input
           name="password"

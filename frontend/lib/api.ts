@@ -38,16 +38,39 @@ function canAutoAuth(): boolean {
   return typeof window !== "undefined";
 }
 
-async function registerGuestIfNeeded(email: string, password: string): Promise<void> {
+export async function registerUser(input: {
+  email: string;
+  password: string;
+  name: string;
+  role?: string;
+}): Promise<void> {
+  let res: Response;
   try {
-    await fetch(`${API_BASE_URL}/api/auth/register`, {
+    res = await fetch(`${API_BASE_URL}/api/auth/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        email,
-        password,
-        role: "admin",
+        email: input.email,
+        password: input.password,
+        name: input.name,
+        role: input.role ?? "ADMIN",
       }),
+    });
+  } catch {
+    throw new Error(networkErrorMessage());
+  }
+  if (!res.ok) {
+    throw new Error(await parseError(res));
+  }
+}
+
+async function registerGuestIfNeeded(email: string, password: string): Promise<void> {
+  try {
+    await registerUser({
+      email,
+      password,
+      name: "Guest Admin",
+      role: "ADMIN",
     });
   } catch {
     // 네트워크 실패는 상위 로그인 시도에서 처리
@@ -214,6 +237,12 @@ async function parseError(res: Response): Promise<string> {
     const j = JSON.parse(t) as { detail?: unknown };
     if (typeof j.detail === "string") {
       const detailLower = j.detail.toLowerCase();
+      if (
+        detailLower.includes("forbidden") ||
+        j.detail.includes("접근할 권한이 없습니다")
+      ) {
+        return "권한이 부족합니다. Settings에서 회원가입 + 로그인(ADMIN) 후 다시 시도해 주세요.";
+      }
       if (
         detailLower.includes("not authenticated") ||
         detailLower.includes("invalid token") ||

@@ -1,0 +1,12 @@
+---
+description: Auto commit and push after requested fixes
+alwaysApply: true
+---
+
+# Commit/Push Workflow Preference
+
+- 이 프로젝트에서는 사용자가 코드 수정을 요청하면, 수정 완료 후 별도 재확인 질문 없이 바로 커밋/푸시까지 진행한다.
+- 커밋 전에는 빌드/린트 등 기본 검증을 수행하고, 실패 시 먼저 수정한 뒤 커밋한다.
+- 커밋 메시지는 변경 의도(why)를 중심으로 간결하게 작성한다.
+- 원격은 항상 이 프로젝트에서 사용 중인 배포 저장소 기준(`origin`)으로 푸시한다.
+- 사용자가 명시적으로 "커밋/푸시하지 말라"고 한 경우에만 예외로 한다.

@@ -34,11 +34,15 @@ def register_user(payload: UserCreate, db: Session = Depends(get_db)):
             detail="이미 가입된 이메일입니다.",
         )
 
+    requested_role = (payload.role or "ADMIN").upper()
+    allowed_roles = {"ADMIN", "PLANNER", "BUYER", "INVENTORY", "VIEWER", "USER"}
+    role = requested_role if requested_role in allowed_roles else "ADMIN"
+
     user = User(
         email=payload.email,
         name=payload.name,
         password_hash=hash_password(payload.password),
-        role="USER",
+        role=role,
         is_active=True,
     )
     db.add(user)
