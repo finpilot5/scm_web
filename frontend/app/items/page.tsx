@@ -58,7 +58,7 @@ export default function ItemsPage() {
     }
 
     try {
-      await createItem({
+      const created = await createItem({
         code,
         name,
         type,
@@ -70,9 +70,16 @@ export default function ItemsPage() {
         shelf_life_days,
         is_active: true,
       });
+      // 등록 직후 목록 즉시 반영 (새로고침 없이 확인 가능)
+      setItems((prev) => [...prev, created]);
       e.currentTarget.reset();
       setMessage({ type: "ok", text: "품목이 등록되었습니다." });
-      await load();
+      // 백엔드 기준 데이터와 동기화 (실패해도 등록 성공 메시지는 유지)
+      try {
+        await load();
+      } catch {
+        /* ignore reload error */
+      }
     } catch (err) {
       setMessage({
         type: "err",

@@ -12,6 +12,11 @@ type DayMetrics = {
   replenishment: number;
 };
 
+type ManualInput = {
+  actualOrder: number;
+  replenishment: number;
+};
+
 const inputClass =
   "h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 shadow-soft outline-none focus:border-stock";
 
@@ -60,6 +65,7 @@ export default function CalendarPage() {
   const [startDate, setStartDate] = useState<string>(toISODate(new Date()));
   const [message, setMessage] = useState<string>("");
   const [result, setResult] = useState<Generate52wResponse | null>(null);
+  const [manualInputs, setManualInputs] = useState<Record<string, ManualInput>>({});
 
   const products = useMemo(() => items.filter((i) => i.type === "PRODUCT"), [items]);
   const monthGrid = useMemo(() => buildMonthGrid(monthDate), [monthDate]);
@@ -79,6 +85,26 @@ export default function CalendarPage() {
     }
     return out;
   }, [result, startDate]);
+
+  const currentMonthDays = useMemo(
+    () => monthGrid.filter((d) => d.getMonth() === monthDate.getMonth()),
+    [monthGrid, monthDate]
+  );
+
+  const onManualChange = (
+    dayKey: string,
+    field: "actualOrder" | "replenishment",
+    value: number
+  ) => {
+    setManualInputs((prev) => ({
+      ...prev,
+      [dayKey]: {
+        actualOrder: prev[dayKey]?.actualOrder ?? 0,
+        replenishment: prev[dayKey]?.replenishment ?? 0,
+        [field]: Number.isFinite(value) ? value : 0,
+      },
+    }));
+  };
 
   useEffect(() => {
     fetchItems()
@@ -164,6 +190,16 @@ export default function CalendarPage() {
 
       {message ? <p className="text-sm text-slate-700">{message}</p> : null}
 
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 text-xs text-slate-700 shadow-soft">
+        <p className="mb-2 font-semibold text-slate-900">지표 설명</p>
+        <div className="grid gap-1 md:grid-cols-2">
+          <p>재고: 해당 일자 기준 예상 재고</p>
+          <p>계획 발주량: 52주 계산 결과 기준 계획 수량</p>
+          <p>실제 발주량: 운영자가 실제 발주 실적을 수기 입력</p>
+          <p>재고 보충량: 입고/생산 완료로 실제 반영된 보충 수량(수기 입력)</p>
+        </div>
+      </div>
+
       <div className="rounded-2xl border bg-white p-4 shadow-soft">
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -201,11 +237,8 @@ export default function CalendarPage() {
                 }`}
               >
                 <div className="mb-2 text-sm font-semibold">{d.getDate()}</div>
-                <div className="space-y-1 text-[11px] leading-4">
-                  <div>재고: {metrics ? metrics.stock : "-"}</div>
-                  <div>계획 발주량: {metrics ? metrics.plannedOrder : "-"}</div>
-                  <div>실제 발주량: {metrics ? metrics.actualOrder : "-"}</div>
-                  <div>재고 보충량: {metrics ? metrics.replenishment : "-"}</div>
+                <div className="text-[11px] leading-4 text-slate-500">
+                  계획 발주량: {metrics ? metrics.plannedOrder : "-"}
                 </div>
               </div>
             );
@@ -219,9 +252,54 @@ export default function CalendarPage() {
         ) : null}
 
         {result ? (
-          <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-            현재 <strong>실제 발주량</strong>은 실적 API 연동 전까지 0으로 표시됩니다.
-            추후 발주 실적 데이터와 연결하면 자동 반영됩니다.
+          <div className="mt-4 overflow-auto rounded-lg border border-slate-200">
+            <table className="min-w-[900px] w-full text-sm">
+              <thead className="bg-slate-50 text-slate-700">
+                <tr>
+                  <th className="p-2 text-left">일자</th>
+                  <th className="p-2 text-right">재고</th>
+                  <th className="p-2 text-right">계획 발주량</th>
+                  <th className="p-2 text-right">실제 발주량(수기)</th>
+                  <th className="p-2 text-right">재고 보충량(수기)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {currentMonthDays.map((d) => {
+                  const key = toDayKey(d);
+                  const base = dayMetricsMap.get(key);
+                  const manual = manualInputs[key];
+                  const actualOrder = manual?.actualOrder ?? base?.actualOrder ?? 0;
+                  const replenishment = manual?.replenishment ?? base?.replenishment ?? 0;
+                  return (
+                    <tr key={`row-${key}`} className="border-t border-slate-100">
+                      <td className="p-2">{key}</td>
+                      <td className="p-2 text-right">{base ? base.stock : "-"}</td>
+                      <td className="p-2 text-right">{base ? base.plannedOrder : "-"}</td>
+                      <td className="p-2 text-right">
+                        <input
+                          type="number"
+                          className="h-8 w-28 rounded-lg border border-slate-200 px-2 text-right"
+                          value={actualOrder}
+                          onChange={(e) =>
+                            onManualChange(key, "actualOrder", Number(e.target.value || 0))
+                          }
+                        />
+                      </td>
+                      <td className="p-2 text-right">
+                        <input
+                          type="number"
+                          className="h-8 w-28 rounded-lg border border-slate-200 px-2 text-right"
+                          value={replenishment}
+                          onChange={(e) =>
+                            onManualChange(key, "replenishment", Number(e.target.value || 0))
+                          }
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         ) : null}
       </div>
