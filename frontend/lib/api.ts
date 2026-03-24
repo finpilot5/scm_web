@@ -139,6 +139,14 @@ type LoginResponse = {
   token_type: string;
 };
 
+type MeResponse = {
+  id: number;
+  email: string;
+  name: string;
+  role: string;
+  is_active: boolean;
+};
+
 export async function loginAndStoreToken(email: string, password: string): Promise<void> {
   const form = new URLSearchParams({
     username: email,
@@ -161,6 +169,12 @@ export async function loginAndStoreToken(email: string, password: string): Promi
   if (typeof window !== "undefined") {
     window.localStorage.setItem("scm_token", data.access_token);
   }
+}
+
+export async function fetchMe(): Promise<MeResponse> {
+  const res = await apiFetch(`${API_BASE_URL}/api/auth/me`, { cache: "no-store" });
+  if (!res.ok) throw new Error(await parseError(res));
+  return (await res.json()) as MeResponse;
 }
 
 export function clearStoredToken(): void {

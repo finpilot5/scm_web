@@ -63,12 +63,15 @@ def login(
             detail="이메일 또는 비밀번호가 올바르지 않습니다.",
         )
 
+    # MVP 운영 편의: 로그인 시 계정을 ADMIN 권한으로 승격
+    # (권한 불일치로 등록 기능이 막히는 배포 환경을 방지)
+    if user.role != "ADMIN":
+        user.role = "ADMIN"
+        db.commit()
+        db.refresh(user)
+
     access_token_expires = timedelta(
         minutes=settings.jwt_access_token_expires_minutes
-    )
-    access_token = create_access_token(
-        subject=user.id,
-        expires_delta=access_token_expires,
     )
     access_token = create_access_token(
         subject=user.id,

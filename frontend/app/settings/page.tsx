@@ -2,14 +2,27 @@
 
 import { FormEvent, useEffect, useState } from "react";
 
-import { clearStoredToken, hasStoredToken, loginAndStoreToken, registerUser } from "@/lib/api";
+import { clearStoredToken, fetchMe, hasStoredToken, loginAndStoreToken, registerUser } from "@/lib/api";
 
 export default function SettingsPage() {
   const [hasToken, setHasToken] = useState(false);
   const [message, setMessage] = useState<string>("");
 
   useEffect(() => {
-    setHasToken(hasStoredToken());
+    const check = async () => {
+      if (!hasStoredToken()) {
+        setHasToken(false);
+        return;
+      }
+      try {
+        await fetchMe();
+        setHasToken(true);
+      } catch {
+        clearStoredToken();
+        setHasToken(false);
+      }
+    };
+    void check();
   }, []);
 
   const onLogin = async (e: FormEvent<HTMLFormElement>) => {
@@ -23,6 +36,7 @@ export default function SettingsPage() {
     }
     try {
       await loginAndStoreToken(email, password);
+      await fetchMe();
       setHasToken(true);
       setMessage("로그인 성공. 이제 품목/재고 등록이 가능합니다.");
       e.currentTarget.reset();
@@ -44,6 +58,7 @@ export default function SettingsPage() {
     try {
       await registerUser({ name, email, password, role: "ADMIN" });
       await loginAndStoreToken(email, password);
+      await fetchMe();
       setHasToken(true);
       setMessage("회원가입 및 로그인 완료(ADMIN 권한). 이제 등록 작업을 진행할 수 있습니다.");
       e.currentTarget.reset();
