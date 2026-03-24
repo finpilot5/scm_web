@@ -87,7 +87,8 @@ async function registerGuestIfNeeded(email: string, password: string): Promise<v
 async function tryAutoLoginGuest(): Promise<boolean> {
   if (!canAutoAuth()) return false;
   const host = window.location.host.replace(/[^a-zA-Z0-9]/g, "_");
-  const email = `guest_${host}@scm.local`;
+  // pydantic EmailStr 검증에서 special-use 도메인(.local 등)이 거부될 수 있어 .com 사용
+  const email = `guest_${host}@scm-demo.com`;
   const password = "scm-guest-1234";
   try {
     await registerGuestIfNeeded(email, password);
