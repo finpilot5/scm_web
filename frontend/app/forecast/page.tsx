@@ -249,66 +249,89 @@ export default function ForecastPage() {
         </div>
       ) : null}
 
-      <div className="grid gap-3 rounded-2xl border bg-white p-4 shadow-soft md:grid-cols-4">
-        <select
-          className={inputClass}
-          value={productId || ""}
-          onChange={(e) => setProductId(Number(e.target.value || 0))}
-        >
-          <option value="">상품 선택</option>
-          {products.map((p) => (
-            <option key={p.id} value={p.id}>
-              [{p.code}] {p.name}
-            </option>
-          ))}
-        </select>
-        <select className={inputClass} value={periodDays} onChange={(e) => setPeriodDays(Number(e.target.value))}>
-          <option value={30}>30 days</option>
-          <option value={60}>60 days</option>
-          <option value={90}>90 days</option>
-        </select>
-        <input
-          type="number"
-          className={inputClass}
-          value={avgDailySales}
-          onChange={(e) => setAvgDailySales(Number(e.target.value || 0))}
-          placeholder="최근 일평균 판매량"
-        />
-        <input
-          type="number"
-          className={inputClass}
-          value={safetyStock}
-          onChange={(e) => setSafetyStock(Number(e.target.value || 0))}
-          placeholder="안전재고"
-        />
-        <input
-          type="number"
-          className={inputClass}
-          value={trendPct}
-          onChange={(e) => setTrendPct(Number(e.target.value || 0))}
-          placeholder="트렌드(%)"
-        />
-        <input
-          type="number"
-          className={inputClass}
-          value={seasonalityPct}
-          onChange={(e) => setSeasonalityPct(Number(e.target.value || 0))}
-          placeholder="시즌성(%)"
-        />
-        <input
-          type="number"
-          className={inputClass}
-          value={productionLeadDays}
-          onChange={(e) => setProductionLeadDays(Number(e.target.value || 0))}
-          placeholder="생산 리드타임(일)"
-        />
-        <input
-          type="number"
-          className={inputClass}
-          value={materialLeadDays}
-          onChange={(e) => setMaterialLeadDays(Number(e.target.value || 0))}
-          placeholder="원부자재 리드타임(일)"
-        />
+      <div className="rounded-2xl border bg-white p-4 shadow-soft">
+        <p className="mb-3 text-xs text-slate-600">
+          입력값 설명: 상품/기간/판매패턴(평균·트렌드·시즌성)과 안전재고·리드타임을 기준으로 생산/발주 계획을 계산합니다.
+        </p>
+        <div className="grid gap-3 md:grid-cols-4">
+          <label className="block text-sm">
+            <span className="mb-1 block text-slate-600">상품(SKU)</span>
+            <select
+              className={inputClass}
+              value={productId || ""}
+              onChange={(e) => setProductId(Number(e.target.value || 0))}
+            >
+              <option value="">상품 선택</option>
+              {products.map((p) => (
+                <option key={p.id} value={p.id}>
+                  [{p.code}] {p.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block text-sm">
+            <span className="mb-1 block text-slate-600">예측 기간</span>
+            <select className={inputClass} value={periodDays} onChange={(e) => setPeriodDays(Number(e.target.value))}>
+              <option value={30}>30 days</option>
+              <option value={60}>60 days</option>
+              <option value={90}>90 days</option>
+            </select>
+          </label>
+          <label className="block text-sm">
+            <span className="mb-1 block text-slate-600">최근 일평균 판매량</span>
+            <input
+              type="number"
+              className={inputClass}
+              value={avgDailySales}
+              onChange={(e) => setAvgDailySales(Number(e.target.value || 0))}
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="mb-1 block text-slate-600">안전재고</span>
+            <input
+              type="number"
+              className={inputClass}
+              value={safetyStock}
+              onChange={(e) => setSafetyStock(Number(e.target.value || 0))}
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="mb-1 block text-slate-600">트렌드(%)</span>
+            <input
+              type="number"
+              className={inputClass}
+              value={trendPct}
+              onChange={(e) => setTrendPct(Number(e.target.value || 0))}
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="mb-1 block text-slate-600">시즌성(%)</span>
+            <input
+              type="number"
+              className={inputClass}
+              value={seasonalityPct}
+              onChange={(e) => setSeasonalityPct(Number(e.target.value || 0))}
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="mb-1 block text-slate-600">생산 리드타임(일)</span>
+            <input
+              type="number"
+              className={inputClass}
+              value={productionLeadDays}
+              onChange={(e) => setProductionLeadDays(Number(e.target.value || 0))}
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="mb-1 block text-slate-600">원부자재 리드타임(일)</span>
+            <input
+              type="number"
+              className={inputClass}
+              value={materialLeadDays}
+              onChange={(e) => setMaterialLeadDays(Number(e.target.value || 0))}
+            />
+          </label>
+        </div>
       </div>
 
       <div className="flex justify-end">
