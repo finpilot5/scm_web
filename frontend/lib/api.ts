@@ -98,18 +98,33 @@ async function tryAutoLoginGuest(): Promise<boolean> {
   }
 }
 
+async function isAuthErrorResponse(res: Response): Promise<boolean> {
+  if (res.status === 401 || res.status === 403) return true;
+  try {
+    const t = (await res.clone().text()).toLowerCase();
+    return (
+      t.includes("not authenticated") ||
+      t.includes("invalid token") ||
+      t.includes("유효하지 않은 토큰")
+    );
+  } catch {
+    return false;
+  }
+}
+
 async function apiFetch(input: string, init?: RequestInit, retried = false): Promise<Response> {
   try {
     const res = await fetch(input, buildRequestInitWithAuth(init));
-    if ((res.status === 401 || res.status === 403) && !retried) {
+    const authError = await isAuthErrorResponse(res);
+    if (authError && !retried) {
       const authed = await tryAutoLoginGuest();
       if (authed) {
         const retryRes = await apiFetch(input, init, true);
-        if (retryRes.status !== 403) {
+        if (!(await isAuthErrorResponse(retryRes))) {
           return retryRes;
         }
       }
-      // 일부 배포에서는 토큰이 있을 때만 role 검사로 403이 발생하므로 무토큰으로 1회 재시도
+      // 일부 배포에서는 토큰/인증 방식 차이로 막히므로 무토큰으로 1회 재시도
       return fetch(input, buildRequestInitWithoutAuth(init));
     }
     return res;
