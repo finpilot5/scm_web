@@ -34,19 +34,14 @@ export default function ItemsPage() {
 
   const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const fd = new FormData(e.currentTarget);
+    const form = e.currentTarget;
+    const fd = new FormData(form);
     const code = String(fd.get("code") || "").trim();
     const name = String(fd.get("name") || "").trim();
     const type = String(fd.get("type") || "").trim().toUpperCase();
     const uom = String(fd.get("uom") || "").trim();
-    const safety_stock_qty = Number(fd.get("safety_stock_qty") || 0);
-    const lead_time_days = Number(fd.get("lead_time_days") || 0);
-    const productionLeadRaw = String(fd.get("production_leadtime_days") || "").trim();
-    const production_leadtime_days = productionLeadRaw === "" ? null : Number(productionLeadRaw);
     const capaRaw = String(fd.get("production_capa_per_day") || "").trim();
     const production_capa_per_day = capaRaw === "" ? null : Number(capaRaw);
-    const shelfRaw = String(fd.get("shelf_life_days") || "").trim();
-    const shelf_life_days = shelfRaw === "" ? null : Number(shelfRaw);
 
     if (!code || !name || !type || !uom) {
       setMessage({ type: "err", text: "코드, 이름, 유형, 단위는 필수입니다." });
@@ -63,16 +58,17 @@ export default function ItemsPage() {
         name,
         type,
         uom,
-        safety_stock_qty,
-        lead_time_days,
-        production_leadtime_days,
+        safety_stock_qty: 0,
+        lead_time_days: 0,
+        production_leadtime_days: null,
+        material_leadtime_days: null,
         production_capa_per_day,
-        shelf_life_days,
+        shelf_life_days: null,
         is_active: true,
       });
       // 등록 직후 목록 즉시 반영 (새로고침 없이 확인 가능)
       setItems((prev) => [...prev, created]);
-      e.currentTarget.reset();
+      form.reset();
       setMessage({ type: "ok", text: "품목이 등록되었습니다." });
       // 백엔드 기준 데이터와 동기화 (실패해도 등록 성공 메시지는 유지)
       try {
@@ -111,6 +107,9 @@ export default function ItemsPage() {
         <h1 className="text-2xl font-semibold text-slate-900">품목 등록</h1>
         <p className="mt-1 text-sm text-slate-600">
           제품(PRODUCT)을 프론트에서 등록합니다.
+        </p>
+        <p className="mt-1 text-xs text-slate-500">
+          재고/리드타임/소비기한 정보는 재고 화면에서 관리합니다.
         </p>
       </div>
 
@@ -158,36 +157,8 @@ export default function ItemsPage() {
               </select>
             </label>
             <label className="block text-sm">
-              <span className="text-slate-600">재고</span>
-              <input
-                name="safety_stock_qty"
-                type="number"
-                className={inputClass}
-                defaultValue={0}
-                step="any"
-              />
-            </label>
-            <label className="block text-sm sm:col-span-2">
-              <span className="text-slate-600">리드타임(일)</span>
-              <input
-                name="lead_time_days"
-                type="number"
-                className={inputClass}
-                defaultValue={0}
-                min={0}
-              />
-            </label>
-            <label className="block text-sm">
-              <span className="text-slate-600">생산 리드타임(일)</span>
-              <input name="production_leadtime_days" type="number" className={inputClass} min={0} />
-            </label>
-            <label className="block text-sm">
               <span className="text-slate-600">생산 CAPA / 일</span>
               <input name="production_capa_per_day" type="number" className={inputClass} min={0} step="any" />
-            </label>
-            <label className="block text-sm sm:col-span-2">
-              <span className="text-slate-600">소비기한(일)</span>
-              <input name="shelf_life_days" type="number" className={inputClass} min={0} />
             </label>
           </div>
           <button
