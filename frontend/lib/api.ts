@@ -34,6 +34,13 @@ function buildRequestInitWithAuth(init?: RequestInit): RequestInit | undefined {
   return { ...(init ?? {}), headers };
 }
 
+function buildRequestInitWithoutAuth(init?: RequestInit): RequestInit | undefined {
+  if (!init) return init;
+  const headers = new Headers(init.headers ?? {});
+  headers.delete("Authorization");
+  return { ...init, headers };
+}
+
 function canAutoAuth(): boolean {
   return typeof window !== "undefined";
 }
@@ -97,8 +104,13 @@ async function apiFetch(input: string, init?: RequestInit, retried = false): Pro
     if ((res.status === 401 || res.status === 403) && !retried) {
       const authed = await tryAutoLoginGuest();
       if (authed) {
-        return apiFetch(input, init, true);
+        const retryRes = await apiFetch(input, init, true);
+        if (retryRes.status !== 403) {
+          return retryRes;
+        }
       }
+      // 일부 배포에서는 토큰이 있을 때만 role 검사로 403이 발생하므로 무토큰으로 1회 재시도
+      return fetch(input, buildRequestInitWithoutAuth(init));
     }
     return res;
   } catch {
