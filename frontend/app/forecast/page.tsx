@@ -34,6 +34,7 @@ type CalendarTodo = {
 };
 
 const FORECAST_TODOS_KEY = "scm_forecast_calendar_todos";
+const MONTH_LABELS = ["1월", "2월", "3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"] as const;
 
 function toISO(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
@@ -63,6 +64,9 @@ export default function ForecastPage() {
   const [avgDailySales, setAvgDailySales] = useState<number>(10);
   const [trendPct, setTrendPct] = useState<number>(0);
   const [seasonalityPct, setSeasonalityPct] = useState<number>(0);
+  const [seasonalityByMonth, setSeasonalityByMonth] = useState<number[]>(
+    () => new Array(12).fill(0)
+  );
   const [safetyStock, setSafetyStock] = useState<number>(20);
   const [productionLeadDays, setProductionLeadDays] = useState<number>(5);
   const [materialLeadDays, setMaterialLeadDays] = useState<number>(20);
@@ -103,8 +107,84 @@ export default function ForecastPage() {
 
   const currentProductStock = selectedProduct ? itemStockMap.get(selectedProduct.id) ?? 0 : 0;
 
-  const demandFactor = 1 + trendPct / 100 + seasonalityPct / 100;
-  const forecastSales = clampNonNegative(avgDailySales * periodDays * demandFactor);
+  const scheduleRows = useMemo<PlanRow[]>(() => {
+    const buckets = Math.max(1, Math.ceil(periodDays / 7));
+    const base = new Date();
+
+    // 1) 트렌드/시즌성 반영 수요 계산
+    const demandRows: Array<{ span: number; demand: number; demandDate: Date; productionDate: Date; orderDate: Date; label: string; dayIndex: number }> = [];
+    for (let i = 0; i < buckets; i += 1) {
+      const start = i * 7;
+      const end = Math.min(periodDays, start + 7);
+      const span = Math.max(1, end - start);
+      const demandDate = addDays(base, end);
+      const productionDate = addDays(demandDate, -productionLeadDays);
+      const orderDate = addDays(productionDate, -materialLeadDays);
+
+      // 트렌드: 구간이 지날수록 누적(장기 방향)
+      const trendFactor = Math.pow(1 + trendPct / 100, i);
+      // 시즌성: 해당 월의 반복 계수(월별 패턴)
+      const monthFactor = 1 + (seasonalityByMonth[demandDate.getMonth()] ?? 0) / 100;
+      // 시즌성 전체 보정치(기존 단일 입력)도 유지
+      const globalSeasonalityFactor = 1 + seasonalityPct / 100;
+      const demand = clampNonNegative(avgDailySales * span * trendFactor * monthFactor * globalSeasonalityFactor);
+
+      demandRows.push({
+        span,
+        demand,
+        demandDate,
+        productionDate,
+        orderDate,
+        label: `W${i + 1}`,
+        dayIndex: end,
+      });
+    }
+
+    const forecastTotal = demandRows.reduce((acc, r) => acc + r.demand, 0);
+    const requiredProdTotal = clampNonNegative(forecastTotal - currentProductStock + safetyStock);
+
+    // 2) 생산/재고 시뮬레이션
+    const rows: PlanRow[] = [];
+    let projectedInventory = currentProductStock;
+    let producedAcc = 0;
+    for (let i = 0; i < demandRows.length; i += 1) {
+      const r = demandRows[i];
+      const remaining = demandRows.length - i;
+      const production =
+        remaining === 1
+          ? clampNonNegative(requiredProdTotal - producedAcc)
+          : clampNonNegative(requiredProdTotal / Math.max(demandRows.length, 1));
+      producedAcc += production;
+      projectedInventory = projectedInventory - r.demand + production;
+      rows.push({
+        label: r.label,
+        dayIndex: r.dayIndex,
+        demand: Number(r.demand.toFixed(2)),
+        production: Number(production.toFixed(2)),
+        order: Number(production.toFixed(2)),
+        projectedInventory: Number(projectedInventory.toFixed(2)),
+        demandDate: toISO(r.demandDate),
+        productionDate: toISO(r.productionDate),
+        orderDate: toISO(r.orderDate),
+      });
+    }
+    return rows;
+  }, [
+    periodDays,
+    avgDailySales,
+    trendPct,
+    seasonalityByMonth,
+    seasonalityPct,
+    currentProductStock,
+    safetyStock,
+    productionLeadDays,
+    materialLeadDays,
+  ]);
+
+  const forecastSales = useMemo(
+    () => scheduleRows.reduce((acc, r) => acc + r.demand, 0),
+    [scheduleRows]
+  );
   const requiredProduction = clampNonNegative(forecastSales - currentProductStock + safetyStock);
 
   const bomForProduct = useMemo(
@@ -130,49 +210,6 @@ export default function ForecastPage() {
       })
       .filter((x) => x.required > 0 || x.order > 0);
   }, [bomForProduct, raws, items, requiredProduction, itemStockMap]);
-
-  const scheduleRows = useMemo<PlanRow[]>(() => {
-    const buckets = Math.max(1, Math.ceil(periodDays / 7));
-    const base = new Date();
-    const rows: PlanRow[] = [];
-    let projectedInventory = currentProductStock;
-    for (let i = 0; i < buckets; i += 1) {
-      const start = i * 7;
-      const end = Math.min(periodDays, start + 7);
-      const span = Math.max(1, end - start);
-      const weekDemand = clampNonNegative(avgDailySales * span * demandFactor);
-      const remaining = buckets - i;
-      const weekProduction =
-        remaining === 1
-          ? clampNonNegative(requiredProduction - rows.reduce((acc, r) => acc + r.production, 0))
-          : clampNonNegative(requiredProduction / buckets);
-      projectedInventory = projectedInventory - weekDemand + weekProduction;
-      const demandDate = addDays(base, end);
-      const productionDate = addDays(demandDate, -productionLeadDays);
-      const orderDate = addDays(productionDate, -materialLeadDays);
-      rows.push({
-        label: `W${i + 1}`,
-        dayIndex: end,
-        demand: Number(weekDemand.toFixed(2)),
-        production: Number(weekProduction.toFixed(2)),
-        order: Number((weekProduction * (materialOrders[0]?.order ? materialOrders[0].order / Math.max(requiredProduction, 1) : 0)).toFixed(2)),
-        projectedInventory: Number(projectedInventory.toFixed(2)),
-        demandDate: toISO(demandDate),
-        productionDate: toISO(productionDate),
-        orderDate: toISO(orderDate),
-      });
-    }
-    return rows;
-  }, [
-    periodDays,
-    avgDailySales,
-    demandFactor,
-    currentProductStock,
-    requiredProduction,
-    productionLeadDays,
-    materialLeadDays,
-    materialOrders,
-  ]);
 
   const chartData = useMemo(
     () =>
@@ -331,6 +368,34 @@ export default function ForecastPage() {
               onChange={(e) => setMaterialLeadDays(Number(e.target.value || 0))}
             />
           </label>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border bg-white p-4 shadow-soft">
+        <p className="mb-2 text-sm font-semibold text-slate-800">트렌드 vs 시즌성</p>
+        <div className="grid gap-1 text-xs text-slate-600">
+          <p>트렌드: 시간이 지날수록 누적되는 장기 증가/감소(예: 매달 2% 성장).</p>
+          <p>시즌성: 특정 월/시점에 반복되는 변동(예: 여름 +10%, 비수기 -5%).</p>
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-6">
+          {MONTH_LABELS.map((label, idx) => (
+            <label key={label} className="block text-xs">
+              <span className="mb-1 block text-slate-600">{label} 시즌성(%)</span>
+              <input
+                type="number"
+                className={inputClass}
+                value={seasonalityByMonth[idx] ?? 0}
+                onChange={(e) => {
+                  const v = Number(e.target.value || 0);
+                  setSeasonalityByMonth((prev) => {
+                    const next = [...prev];
+                    next[idx] = Number.isFinite(v) ? v : 0;
+                    return next;
+                  });
+                }}
+              />
+            </label>
+          ))}
         </div>
       </div>
 
