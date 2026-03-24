@@ -99,9 +99,7 @@ export default function CalendarPage() {
     const currentInventory = Number(fd.get("current_inventory") || 0);
     const targetStock = Number(fd.get("target_stock") || 0);
     const weeklyForecast = Number(fd.get("weekly_forecast") || 0);
-    const moqRaw = String(fd.get("moq") || "").trim();
     const capaRaw = String(fd.get("production_capa_per_day") || "").trim();
-    const moq = moqRaw === "" ? null : Number(moqRaw);
     const productionCapaPerDay = capaRaw === "" ? null : Number(capaRaw);
 
     if (!productId) {
@@ -124,9 +122,9 @@ export default function CalendarPage() {
         start_date: startDate,
         current_inventory: currentInventory,
         safety_stock: targetStock,
-        moq,
+        moq: null,
         production_leadtime_days: 5,
-        material_leadtime_days: 3,
+        material_leadtime_days: 0,
         production_capa_per_day: productionCapaPerDay,
         forecast_by_week: forecastByWeek,
       });
@@ -157,7 +155,6 @@ export default function CalendarPage() {
         <input name="target_stock" type="number" className={inputClass} placeholder="목표 재고" defaultValue={50} />
         <input name="weekly_forecast" type="number" className={inputClass} placeholder="주간 수요예측" defaultValue={80} />
         <div className="flex gap-2">
-          <input name="moq" type="number" className={inputClass} placeholder="MOQ" defaultValue={0} />
           <input name="production_capa_per_day" type="number" className={inputClass} placeholder="일 CAPA" defaultValue={300} />
           <button type="submit" className="rounded-xl bg-stock px-4 py-2 text-white whitespace-nowrap">
             생성

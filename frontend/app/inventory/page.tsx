@@ -29,7 +29,7 @@ export default function InventoryPage() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ type: "ok" | "err"; text: string } | null>(null);
 
-  const rawItems = useMemo(() => items.filter((i) => i.type === "RAW"), [items]);
+  const selectableItems = useMemo(() => items, [items]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -106,8 +106,7 @@ export default function InventoryPage() {
       <div>
         <h1 className="text-2xl font-semibold text-slate-900">재고 입력</h1>
         <p className="mt-1 text-sm text-slate-600">
-          원재료(RAW) 재고 스냅샷을 등록합니다. 창고를 선택하지 않으면 기본값 <strong>MAIN</strong>을
-          자동 사용합니다.
+          재고 스냅샷을 등록합니다. 창고를 선택하지 않으면 기본값 <strong>MAIN</strong>을 자동 사용합니다.
         </p>
       </div>
 
@@ -141,12 +140,12 @@ export default function InventoryPage() {
             </select>
           </label>
           <label className="block text-sm">
-            <span className="text-slate-600">품목 (원재료 권장)</span>
+            <span className="text-slate-600">품목</span>
             <select name="item_id" className={inputClass} required defaultValue="">
               <option value="" disabled>
                 선택
               </option>
-              {rawItems.map((i) => (
+              {selectableItems.map((i) => (
                 <option key={i.id} value={i.id}>
                   [{i.code}] {i.name} ({i.uom})
                 </option>

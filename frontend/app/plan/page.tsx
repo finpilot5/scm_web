@@ -44,10 +44,7 @@ export default function PlanPage() {
     const start_date = String(fd.get("start_date") || todayISO());
     const current_inventory = Number(fd.get("current_inventory") || 0);
     const safety_stock = Number(fd.get("safety_stock") || 0);
-    const moqRaw = String(fd.get("moq") || "").trim();
-    const moq = moqRaw === "" ? null : Number(moqRaw);
     const production_leadtime_days = Number(fd.get("production_leadtime_days") || 0);
-    const material_leadtime_days = Number(fd.get("material_leadtime_days") || 0);
     const capaRaw = String(fd.get("production_capa_per_day") || "").trim();
     const production_capa_per_day = capaRaw === "" ? null : Number(capaRaw);
     const weekly = Number(fd.get("weekly_forecast") || 0);
@@ -68,9 +65,9 @@ export default function PlanPage() {
         start_date,
         current_inventory,
         safety_stock,
-        moq,
+        moq: null,
         production_leadtime_days,
-        material_leadtime_days,
+        material_leadtime_days: 0,
         production_capa_per_day,
         forecast_by_week,
       });
@@ -94,9 +91,7 @@ export default function PlanPage() {
         <input name="start_date" type="date" className={inputClass} defaultValue={todayISO()} />
         <input name="current_inventory" type="number" className={inputClass} placeholder="현재 재고" defaultValue={100} />
         <input name="safety_stock" type="number" className={inputClass} placeholder="목표 재고" defaultValue={50} />
-        <input name="moq" type="number" className={inputClass} placeholder="MOQ" defaultValue={0} />
         <input name="production_leadtime_days" type="number" className={inputClass} placeholder="생산 리드타임(일)" defaultValue={5} />
-        <input name="material_leadtime_days" type="number" className={inputClass} placeholder="원재료 리드타임(일)" defaultValue={3} />
         <input name="production_capa_per_day" type="number" className={inputClass} placeholder="일 생산 CAPA" defaultValue={300} />
         <input name="weekly_forecast" type="number" className={inputClass} placeholder="주간 수요예측" defaultValue={80} />
         <button type="submit" className="rounded-xl bg-stock px-4 py-2 text-white">

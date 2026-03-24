@@ -40,13 +40,9 @@ export default function ItemsPage() {
     const type = String(fd.get("type") || "").trim().toUpperCase();
     const uom = String(fd.get("uom") || "").trim();
     const safety_stock_qty = Number(fd.get("safety_stock_qty") || 0);
-    const moqRaw = String(fd.get("moq") || "").trim();
-    const moq = moqRaw === "" ? null : Number(moqRaw);
     const lead_time_days = Number(fd.get("lead_time_days") || 0);
     const productionLeadRaw = String(fd.get("production_leadtime_days") || "").trim();
     const production_leadtime_days = productionLeadRaw === "" ? null : Number(productionLeadRaw);
-    const materialLeadRaw = String(fd.get("material_leadtime_days") || "").trim();
-    const material_leadtime_days = materialLeadRaw === "" ? null : Number(materialLeadRaw);
     const capaRaw = String(fd.get("production_capa_per_day") || "").trim();
     const production_capa_per_day = capaRaw === "" ? null : Number(capaRaw);
     const shelfRaw = String(fd.get("shelf_life_days") || "").trim();
@@ -56,12 +52,8 @@ export default function ItemsPage() {
       setMessage({ type: "err", text: "코드, 이름, 유형, 단위는 필수입니다." });
       return;
     }
-    if (type !== "PRODUCT" && type !== "RAW") {
-      setMessage({ type: "err", text: "유형은 PRODUCT 또는 RAW 여야 합니다." });
-      return;
-    }
-    if (moq !== null && Number.isNaN(moq)) {
-      setMessage({ type: "err", text: "MOQ는 숫자이거나 비워 두세요." });
+    if (type !== "PRODUCT") {
+      setMessage({ type: "err", text: "유형은 PRODUCT 여야 합니다." });
       return;
     }
 
@@ -72,10 +64,8 @@ export default function ItemsPage() {
         type,
         uom,
         safety_stock_qty,
-        moq,
         lead_time_days,
         production_leadtime_days,
-        material_leadtime_days,
         production_capa_per_day,
         shelf_life_days,
         is_active: true,
@@ -113,7 +103,7 @@ export default function ItemsPage() {
       <div>
         <h1 className="text-2xl font-semibold text-slate-900">품목 등록</h1>
         <p className="mt-1 text-sm text-slate-600">
-          제품(PRODUCT)과 원재료(RAW)를 프론트에서 등록합니다. 대시보드·BOM 계산에 사용됩니다.
+          제품(PRODUCT)을 프론트에서 등록합니다.
         </p>
       </div>
 
@@ -148,7 +138,6 @@ export default function ItemsPage() {
               <span className="text-slate-600">유형 *</span>
               <select name="type" className={inputClass} required defaultValue="PRODUCT">
                 <option value="PRODUCT">PRODUCT (제품)</option>
-                <option value="RAW">RAW (원재료)</option>
               </select>
             </label>
             <label className="block text-sm">
@@ -182,16 +171,8 @@ export default function ItemsPage() {
               />
             </label>
             <label className="block text-sm">
-              <span className="text-slate-600">MOQ (선택)</span>
-              <input name="moq" type="number" className={inputClass} min={0} step="any" />
-            </label>
-            <label className="block text-sm">
               <span className="text-slate-600">생산 리드타임(일)</span>
               <input name="production_leadtime_days" type="number" className={inputClass} min={0} />
-            </label>
-            <label className="block text-sm">
-              <span className="text-slate-600">원재료 리드타임(일)</span>
-              <input name="material_leadtime_days" type="number" className={inputClass} min={0} />
             </label>
             <label className="block text-sm">
               <span className="text-slate-600">생산 CAPA / 일</span>
