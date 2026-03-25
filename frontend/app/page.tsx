@@ -3,15 +3,35 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
+import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+
 import { InventoryRequiredChart } from "@/components/InventoryRequiredChart";
 import { KpiStatCard } from "@/components/KpiStatCard";
 import { PeriodToggle } from "@/components/PeriodToggle";
 import { ProcurementForecastChart } from "@/components/ProcurementForecastChart";
 import { ProductFilter } from "@/components/ProductFilter";
-import { ShortageTable } from "@/components/ShortageTable";
 import { TodoItem } from "@/components/TodoItem";
-import { checkApiHealth, fetchItems, getDashboardData } from "@/lib/api";
-import type { DashboardResponse, Item, MaterialRow, Period } from "@/lib/types";
+import { checkApiHealth, fetchInventories, fetchItems, generate52wPlan, getDashboardData } from "@/lib/api";
+import type { DashboardResponse, Generate52wResponse, InventoryRecord, Item, MaterialRow, Period } from "@/lib/types";
+
+function todayISO(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function periodToHorizonWeeks(period: Period): number {
+  if (period === "3M") return 13;
+  if (period === "6M") return 26;
+  return 52;
+}
 
 export default function DashboardPage() {
   const [period, setPeriod] = useState<Period>("3M");
@@ -20,8 +40,15 @@ export default function DashboardPage() {
   const [allItems, setAllItems] = useState<Item[]>([]);
   const [data, setData] = useState<DashboardResponse | null>(null);
   const [apiHealth, setApiHealth] = useState<{ ok: boolean; detail: string } | null>(null);
+  const [inventories, setInventories] = useState<InventoryRecord[]>([]);
+  const [schedule, setSchedule] = useState<Generate52wResponse | null>(null);
+  const [scheduleLoading, setScheduleLoading] = useState(false);
 
   const productItems = useMemo(() => allItems.filter((i) => i.type === "PRODUCT"), [allItems]);
+  const selectedProduct = useMemo(
+    () => productItems.find((p) => String(p.id) === productId) ?? null,
+    [productItems, productId]
+  );
 
   useEffect(() => {
     checkApiHealth().then(setApiHealth);
@@ -37,11 +64,105 @@ export default function DashboardPage() {
     getDashboardData(period, productId, Math.max(0, productionQty)).then(setData);
   }, [period, productId, productionQty]);
 
-  const todoRows = [
-    { title: "원재료 발주", date: "오늘" },
-    { title: "생산 시작", date: "오늘+1" },
-    { title: "출고 준비", date: "오늘+2" },
-  ];
+  useEffect(() => {
+    fetchInventories()
+      .then((inv) => setInventories(inv))
+      .catch(() => setInventories([]));
+  }, []);
+
+  const currentProductInventory = useMemo(() => {
+    if (!selectedProduct) return 0;
+    return inventories
+      .filter((inv) => inv.item_id === selectedProduct.id)
+      .reduce((acc, inv) => acc + Number(inv.qty || 0), 0);
+  }, [inventories, selectedProduct]);
+
+  useEffect(() => {
+    if (!selectedProduct) return;
+
+    const horizonWeeks = periodToHorizonWeeks(period);
+    const weekly = horizonWeeks > 0 ? Math.max(0, productionQty) / horizonWeeks : 0;
+    const forecast_by_week: Record<number, number> = {};
+    for (let w = 1; w <= 52; w += 1) forecast_by_week[w] = w <= horizonWeeks ? weekly : 0;
+
+    const safety_stock = Number(selectedProduct.safety_stock_qty ?? 0);
+    const production_leadtime_days = Number(selectedProduct.production_leadtime_days ?? 0);
+    const material_leadtime_days = Number(selectedProduct.material_leadtime_days ?? 0);
+    const production_capa_per_day = selectedProduct.production_capa_per_day ?? null;
+    const moq = selectedProduct.moq ?? null;
+
+    setScheduleLoading(true);
+    generate52wPlan({
+      product_id: selectedProduct.id,
+      product_name: selectedProduct.name,
+      start_date: todayISO(),
+      current_inventory: currentProductInventory,
+      safety_stock,
+      moq,
+      production_leadtime_days,
+      material_leadtime_days,
+      production_capa_per_day,
+      forecast_by_week,
+    })
+      .then((out) => setSchedule(out))
+      .catch(() => setSchedule(null))
+      .finally(() => setScheduleLoading(false));
+  }, [period, productionQty, selectedProduct, currentProductInventory]);
+
+  const chartData = useMemo(() => {
+    if (!schedule || !selectedProduct) return [];
+    const safetyStock = Number(selectedProduct.safety_stock_qty ?? 0);
+    return schedule.plans.map((p) => ({
+      week: p.week,
+      inventory: p.inventory,
+      safetyStock,
+    }));
+  }, [schedule, selectedProduct]);
+
+  const orderDateByWeek = useMemo(() => {
+    const m = new Map<number, string>();
+    if (!schedule) return m;
+    for (const t of schedule.todos) {
+      if (t.type === "order") m.set(t.week, String(t.date));
+    }
+    return m;
+  }, [schedule]);
+
+  const productionStartDateByWeek = useMemo(() => {
+    const m = new Map<number, string>();
+    if (!schedule) return m;
+    for (const t of schedule.todos) {
+      if (t.type === "production_start") m.set(t.week, String(t.date));
+    }
+    return m;
+  }, [schedule]);
+
+  const actionWeeks = useMemo(() => {
+    if (!schedule) return [];
+    const set = new Set<number>();
+    for (const t of schedule.todos) {
+      if (t.type === "order" || t.type === "production_start") set.add(t.week);
+    }
+    return [...set].sort((a, b) => a - b).slice(0, 12);
+  }, [schedule]);
+
+  const actionPlanRows = useMemo(() => {
+    if (!schedule) return [];
+    const set = new Set(actionWeeks);
+    return schedule.plans.filter((p) => set.has(p.week)).sort((a, b) => a.week - b.week);
+  }, [schedule, actionWeeks]);
+
+  const todoItems = useMemo(() => {
+    if (!schedule) return [];
+    return schedule.todos
+      .filter((t) => t.type === "order" || t.type === "production_start")
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      .slice(0, 8)
+      .map((t) => ({
+        title: t.type === "order" ? `원재료 발주: ${t.description}` : `생산 시작: ${t.description}`,
+        date: String(t.date),
+      }));
+  }, [schedule]);
 
   return (
     <div className="space-y-6 py-4">
@@ -90,14 +211,89 @@ export default function DashboardPage() {
 
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
-          <h2 className="mb-2 text-lg font-semibold">52 Week Risk Table</h2>
-          <ShortageTable rows={data?.stockVsRequired ?? []} onRowClick={() => undefined} />
+          <h2 className="mb-2 text-lg font-semibold">52주 재고 부족 & 발주 시점</h2>
+
+          {scheduleLoading ? (
+            <div className="text-sm text-slate-600">리드타임 기반 52주 계획을 계산하는 중입니다...</div>
+          ) : chartData.length === 0 ? (
+            <div className="text-sm text-slate-600">계획 데이터가 없습니다. 제품/재고/리드타임을 확인해 주세요.</div>
+          ) : (
+            <>
+              <div className="h-56">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="week" />
+                    <YAxis />
+                    <Tooltip />
+                    <Line type="monotone" dataKey="inventory" stroke="#16a34a" strokeWidth={2} dot={false} name="재고" />
+                    <Line type="monotone" dataKey="safetyStock" stroke="#ef4444" strokeWidth={2} dot={false} name="안전재고" strokeDasharray="6 6" />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="mt-3 overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-200 text-left text-slate-500">
+                      <th className="px-2 py-2">주차</th>
+                      <th className="px-2 py-2 text-right">재고(예상)</th>
+                      <th className="px-2 py-2 text-right">안전재고</th>
+                      <th className="px-2 py-2">부족</th>
+                      <th className="px-2 py-2 text-left">발주일</th>
+                      <th className="px-2 py-2 text-left">생산 시작일</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {actionPlanRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="px-2 py-3 text-slate-500">
+                          계획 내 발주/생산 시작 일정이 없습니다.
+                        </td>
+                      </tr>
+                    ) : (
+                      actionPlanRows.map((p) => (
+                        <tr
+                          key={p.week}
+                          className={`border-b border-slate-100 ${p.shortage_risk ? "bg-red-50/30" : ""}`}
+                        >
+                          <td className="px-2 py-2 font-medium text-slate-800">{p.week}주</td>
+                          <td className="px-2 py-2 text-right">{p.inventory.toFixed(2)}</td>
+                          <td className="px-2 py-2 text-right">{chartData[0]?.safetyStock?.toFixed(2) ?? "-"}</td>
+                          <td className="px-2 py-2">
+                            <span
+                              className={`rounded-md px-2 py-1 text-xs font-semibold ${
+                                p.shortage_risk ? "bg-shortage text-white" : "bg-safe text-white"
+                              }`}
+                            >
+                              {p.shortage_risk ? "예" : "아니오"}
+                            </span>
+                          </td>
+                          <td className="px-2 py-2">{orderDateByWeek.get(p.week) ?? "-"}</td>
+                          <td className="px-2 py-2">{productionStartDateByWeek.get(p.week) ?? "-"}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </div>
+
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
-          <h2 className="mb-2 text-lg font-semibold">Today&apos;s SCM To-Do</h2>
-          {todoRows.map((t) => (
-            <TodoItem key={t.title} title={t.title} date={t.date} />
-          ))}
+          <h2 className="mb-2 text-lg font-semibold">재고 부족 → 발주/생산 시작 To-Do</h2>
+          {scheduleLoading ? (
+            <div className="text-sm text-slate-600">일정 데이터를 불러오는 중입니다...</div>
+          ) : todoItems.length === 0 ? (
+            <div className="text-sm text-slate-600">할 일 일정이 없습니다.</div>
+          ) : (
+            <div className="rounded-2xl border border-slate-200 bg-white p-2">
+              {todoItems.map((t) => (
+                <TodoItem key={`${t.title}-${t.date}`} title={t.title} date={t.date} />
+              ))}
+            </div>
+          )}
         </div>
       </section>
     </div>
