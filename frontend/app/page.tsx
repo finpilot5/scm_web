@@ -47,6 +47,7 @@ export default function DashboardPage() {
   const [period, setPeriod] = useState<Period>("3M");
   const [productId, setProductId] = useState<string>("");
   const [productionQty, setProductionQty] = useState<number>(100);
+  const [avgDailyUsageInput, setAvgDailyUsageInput] = useState<string>("10");
   const [allItems, setAllItems] = useState<Item[]>([]);
   const [data, setData] = useState<DashboardResponse | null>(null);
   const [apiHealth, setApiHealth] = useState<{ ok: boolean; detail: string } | null>(null);
@@ -61,6 +62,11 @@ export default function DashboardPage() {
     () => productItems.find((p) => String(p.id) === productId) ?? null,
     [productItems, productId]
   );
+
+  const avgDailyUsage = useMemo(() => {
+    const n = Number(avgDailyUsageInput);
+    return Number.isFinite(n) ? Math.max(0, n) : 0;
+  }, [avgDailyUsageInput]);
 
   useEffect(() => {
     checkApiHealth().then(setApiHealth);
@@ -93,7 +99,8 @@ export default function DashboardPage() {
     if (!selectedProduct) return;
 
     const horizonWeeks = periodToHorizonWeeks(period);
-    const weekly = horizonWeeks > 0 ? Math.max(0, productionQty) / horizonWeeks : 0;
+    // 52주 일정 엔진의 forecast_by_week(=주간 수요)는 일평균 예상 사용량(일 단위)을 7로 환산해 넣는다.
+    const weekly = avgDailyUsage * 7;
     const forecast_by_week: Record<number, number> = {};
     for (let w = 1; w <= 52; w += 1) forecast_by_week[w] = w <= horizonWeeks ? weekly : 0;
 
@@ -119,7 +126,7 @@ export default function DashboardPage() {
       .then((out) => setSchedule(out))
       .catch(() => setSchedule(null))
       .finally(() => setScheduleLoading(false));
-  }, [period, productionQty, selectedProduct, currentProductInventory, scheduleStartISO]);
+  }, [period, selectedProduct, currentProductInventory, scheduleStartISO, avgDailyUsage]);
 
   const chartDataWeek = useMemo(() => {
     if (!schedule || !selectedProduct) return [];
@@ -233,15 +240,28 @@ export default function DashboardPage() {
           onChange={setProductId}
         />
         <PeriodToggle value={period} onChange={setPeriod} />
-        <input
-          type="number"
-          min={0}
-          step="any"
-          value={productionQty}
-          onChange={(e) => setProductionQty(Number(e.target.value))}
-          className="h-10 w-36 rounded-xl border border-slate-200 px-3 text-sm"
-          placeholder="Production"
-        />
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            min={0}
+            step="any"
+            value={productionQty}
+            onChange={(e) => setProductionQty(Number(e.target.value))}
+            className="h-10 w-36 rounded-xl border border-slate-200 px-3 text-sm"
+            placeholder="생산계획(총)"
+            aria-label="생산계획(총)"
+          />
+          <input
+            type="number"
+            min={0}
+            step="any"
+            value={avgDailyUsageInput}
+            onChange={(e) => setAvgDailyUsageInput(e.target.value)}
+            className="h-10 w-44 rounded-xl border border-slate-200 px-3 text-sm"
+            placeholder="일평균예상사용량"
+            aria-label="일평균예상사용량"
+          />
+        </div>
       </section>
 
       <section className="grid grid-cols-1 gap-4 md:grid-cols-5">
