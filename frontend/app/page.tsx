@@ -57,6 +57,7 @@ export default function DashboardPage() {
   const [scheduleLoading, setScheduleLoading] = useState(false);
   const [chartGranularity, setChartGranularity] = useState<"week" | "day">("week");
   const scheduleStartISO = useMemo(() => todayISO(), []);
+  const horizonWeeks = useMemo(() => periodToHorizonWeeks(period), [period]);
 
   const productItems = useMemo(() => allItems.filter((i) => i.type === "PRODUCT"), [allItems]);
   const selectedProduct = useMemo(
@@ -116,7 +117,6 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!selectedProduct) return;
 
-    const horizonWeeks = periodToHorizonWeeks(period);
     // 52주 일정 엔진의 forecast_by_week(=주간 수요)는 일평균 예상 사용량(일 단위)을 7로 환산해 넣는다.
     const weekly = avgDailyUsage * 7;
     const forecast_by_week: Record<number, number> = {};
@@ -144,23 +144,25 @@ export default function DashboardPage() {
       .then((out) => setSchedule(out))
       .catch(() => setSchedule(null))
       .finally(() => setScheduleLoading(false));
-  }, [period, selectedProduct, scheduleStartISO, avgDailyUsage, initialInventory]);
+  }, [period, selectedProduct, scheduleStartISO, avgDailyUsage, initialInventory, horizonWeeks]);
 
   const chartDataWeek = useMemo(() => {
     if (!schedule || !selectedProduct) return [];
     const safetyStock = Number(selectedProduct.safety_stock_qty ?? 0);
-    return schedule.plans.map((p) => ({
-      week: p.week,
-      inventory: p.inventory,
-      safetyStock,
-    }));
-  }, [schedule, selectedProduct]);
+    return schedule.plans
+      .filter((p) => p.week <= horizonWeeks)
+      .map((p) => ({
+        week: p.week,
+        inventory: p.inventory,
+        safetyStock,
+      }));
+  }, [schedule, selectedProduct, horizonWeeks]);
 
   const chartDataDaily = useMemo(() => {
     if (!schedule || !selectedProduct) return [];
     const safetyStock = Number(selectedProduct.safety_stock_qty ?? 0);
 
-    const totalWeeks = schedule.plans.length;
+    const totalWeeks = horizonWeeks;
     const totalDays = totalWeeks * 7;
     const base = new Date(`${scheduleStartISO}T00:00:00`);
 
@@ -188,7 +190,7 @@ export default function DashboardPage() {
         safetyStock,
       };
     });
-  }, [schedule, selectedProduct, scheduleStartISO]);
+  }, [schedule, selectedProduct, scheduleStartISO, horizonWeeks]);
 
   const chartData = chartGranularity === "week" ? chartDataWeek : chartDataDaily;
 
@@ -216,26 +218,33 @@ export default function DashboardPage() {
     for (const t of schedule.todos) {
       if (t.type === "order" || t.type === "production_start") set.add(t.week);
     }
-    return [...set].sort((a, b) => a - b).slice(0, 12);
-  }, [schedule]);
+    return [...set]
+      .filter((w) => w <= horizonWeeks)
+      .sort((a, b) => a - b)
+      .slice(0, 12);
+  }, [schedule, horizonWeeks]);
 
   const actionPlanRows = useMemo(() => {
     if (!schedule) return [];
     const set = new Set(actionWeeks);
-    return schedule.plans.filter((p) => set.has(p.week)).sort((a, b) => a.week - b.week);
-  }, [schedule, actionWeeks]);
+    return schedule.plans
+      .filter((p) => p.week <= horizonWeeks)
+      .filter((p) => set.has(p.week))
+      .sort((a, b) => a.week - b.week);
+  }, [schedule, actionWeeks, horizonWeeks]);
 
   const todoItems = useMemo(() => {
     if (!schedule) return [];
     return schedule.todos
       .filter((t) => t.type === "order" || t.type === "production_start")
+      .filter((t) => t.week <= horizonWeeks)
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
       .slice(0, 8)
       .map((t) => ({
         title: t.type === "order" ? `원재료 발주: ${t.description}` : `생산 시작: ${t.description}`,
         date: String(t.date),
       }));
-  }, [schedule]);
+  }, [schedule, horizonWeeks]);
 
   return (
     <div className="space-y-6 py-4">
