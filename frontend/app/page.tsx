@@ -197,11 +197,34 @@ export default function DashboardPage() {
       </section>
 
       <section className="grid grid-cols-1 gap-4 md:grid-cols-5">
-        <KpiStatCard title="Inventory Value" value={data ? `${Math.round(data.kpis.totalRequiredProcurementQty * 1000)}` : "-"} />
-        <KpiStatCard title="Risk SKU" value={data?.kpis.totalShortageMaterials ?? "-"} tone="danger" />
-        <KpiStatCard title="Upcoming Production" value={productionQty} />
-        <KpiStatCard title="Upcoming Orders" value={data?.kpis.totalRequiredProcurementQty ?? "-"} tone="warning" />
-        <KpiStatCard title="Expiring Products" value={"2"} tone="warning" />
+        <KpiStatCard
+          title="예상 발주비(추정)"
+          value={data ? Math.round(data.kpis.estimatedProcurementCost).toLocaleString() : "-"}
+          hint="BOM 기반 권장 발주수량 × 단가(백엔드 계산 결과)를 합산한 값입니다."
+        />
+        <KpiStatCard
+          title="리스크 SKU(원재료)"
+          value={data?.kpis.totalShortageMaterials ?? "-"}
+          tone="danger"
+          hint="선택 기간 내 부족 발생(권장 발주량 > 0)한 원재료 SKU 개수입니다."
+        />
+        <KpiStatCard
+          title="생산 계획(입력)"
+          value={productionQty}
+          hint="대시보드에서 선택한 기간(3M/6M/12M) 동안 총 생산량(누적) 입력값입니다."
+        />
+        <KpiStatCard
+          title="권장 발주 수량(총)"
+          value={data?.kpis.totalRequiredProcurementQty ? data.kpis.totalRequiredProcurementQty.toFixed(2) : "-"}
+          tone="warning"
+          hint="선택 기간 동안 BOM 전개 후, 현재 재고 대비 부족분을 합산한 권장 발주량입니다."
+        />
+        <KpiStatCard
+          title="소비기한 임박(예정)"
+          value={"-"}
+          tone="warning"
+          hint="MVP에서는 소비기한 기반 경고 기능이 아직 연동되지 않았습니다."
+        />
       </section>
 
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
@@ -212,6 +235,11 @@ export default function DashboardPage() {
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
           <h2 className="mb-2 text-lg font-semibold">52주 재고 부족 & 발주 시점</h2>
+          <p className="mb-3 text-xs text-slate-600">
+            여기서 <strong>부족</strong>은 해당 주차 <strong>예상 재고</strong>가 <strong>안전재고</strong> 미만인 경우를 뜻하고,
+            <br />
+            <strong>발주일</strong>과 <strong>생산 시작일</strong>은 리드타임을 역산한 권장 일정입니다.
+          </p>
 
           {scheduleLoading ? (
             <div className="text-sm text-slate-600">리드타임 기반 52주 계획을 계산하는 중입니다...</div>
