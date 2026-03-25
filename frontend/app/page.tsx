@@ -27,6 +27,16 @@ function todayISO(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+function dateToISO(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function addDays(base: Date, days: number): Date {
+  const d = new Date(base);
+  d.setDate(d.getDate() + days);
+  return d;
+}
+
 function periodToHorizonWeeks(period: Period): number {
   if (period === "3M") return 13;
   if (period === "6M") return 26;
@@ -43,6 +53,8 @@ export default function DashboardPage() {
   const [inventories, setInventories] = useState<InventoryRecord[]>([]);
   const [schedule, setSchedule] = useState<Generate52wResponse | null>(null);
   const [scheduleLoading, setScheduleLoading] = useState(false);
+  const [chartGranularity, setChartGranularity] = useState<"week" | "day">("week");
+  const scheduleStartISO = useMemo(() => todayISO(), []);
 
   const productItems = useMemo(() => allItems.filter((i) => i.type === "PRODUCT"), [allItems]);
   const selectedProduct = useMemo(
@@ -95,7 +107,7 @@ export default function DashboardPage() {
     generate52wPlan({
       product_id: selectedProduct.id,
       product_name: selectedProduct.name,
-      start_date: todayISO(),
+      start_date: scheduleStartISO,
       current_inventory: currentProductInventory,
       safety_stock,
       moq,
@@ -107,9 +119,9 @@ export default function DashboardPage() {
       .then((out) => setSchedule(out))
       .catch(() => setSchedule(null))
       .finally(() => setScheduleLoading(false));
-  }, [period, productionQty, selectedProduct, currentProductInventory]);
+  }, [period, productionQty, selectedProduct, currentProductInventory, scheduleStartISO]);
 
-  const chartData = useMemo(() => {
+  const chartDataWeek = useMemo(() => {
     if (!schedule || !selectedProduct) return [];
     const safetyStock = Number(selectedProduct.safety_stock_qty ?? 0);
     return schedule.plans.map((p) => ({
@@ -118,6 +130,42 @@ export default function DashboardPage() {
       safetyStock,
     }));
   }, [schedule, selectedProduct]);
+
+  const chartDataDaily = useMemo(() => {
+    if (!schedule || !selectedProduct) return [];
+    const safetyStock = Number(selectedProduct.safety_stock_qty ?? 0);
+
+    const totalWeeks = schedule.plans.length;
+    const totalDays = totalWeeks * 7;
+    const base = new Date(`${scheduleStartISO}T00:00:00`);
+
+    // week1에 대해: inventory_end = inventory_start - demand + production
+    // => inventory_start = inventory_end + demand - production
+    const week1 = schedule.plans[0];
+    const inventoryStart = week1.inventory + week1.demand - week1.production;
+
+    return Array.from({ length: totalDays }).map((_, dayOffset) => {
+      const weekIndex = Math.floor(dayOffset / 7); // 0-based
+      const dayInWeek = dayOffset % 7; // 0..6
+
+      const currentWeek = schedule.plans[weekIndex];
+      const prevInventory =
+        weekIndex === 0 ? inventoryStart : schedule.plans[weekIndex - 1].inventory;
+      const currentInventory = currentWeek.inventory;
+
+      // 일별 선형 보간(대략적인 시각화용)
+      const ratio = (dayInWeek + 1) / 7;
+      const inventory = prevInventory + (currentInventory - prevInventory) * ratio;
+
+      return {
+        date: dateToISO(addDays(base, dayOffset)),
+        inventory,
+        safetyStock,
+      };
+    });
+  }, [schedule, selectedProduct, scheduleStartISO]);
+
+  const chartData = chartGranularity === "week" ? chartDataWeek : chartDataDaily;
 
   const orderDateByWeek = useMemo(() => {
     const m = new Map<number, string>();
@@ -241,6 +289,28 @@ export default function DashboardPage() {
             <strong>발주일</strong>과 <strong>생산 시작일</strong>은 리드타임을 역산한 권장 일정입니다.
           </p>
 
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setChartGranularity("week")}
+              className={`rounded-xl border px-3 py-1 text-xs font-medium ${
+                chartGranularity === "week" ? "border-stock bg-stock text-white" : "border-slate-200 bg-white text-slate-700"
+              }`}
+            >
+              주차(52주)
+            </button>
+            <button
+              type="button"
+              onClick={() => setChartGranularity("day")}
+              className={`rounded-xl border px-3 py-1 text-xs font-medium ${
+                chartGranularity === "day" ? "border-stock bg-stock text-white" : "border-slate-200 bg-white text-slate-700"
+              }`}
+            >
+              일자(52주 펼침)
+            </button>
+            <span className="text-xs text-slate-500">표는 주차 기준으로 표시됩니다.</span>
+          </div>
+
           {scheduleLoading ? (
             <div className="text-sm text-slate-600">리드타임 기반 52주 계획을 계산하는 중입니다...</div>
           ) : chartData.length === 0 ? (
@@ -251,7 +321,15 @@ export default function DashboardPage() {
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={chartData}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="week" />
+                    <XAxis
+                      dataKey={chartGranularity === "week" ? "week" : "date"}
+                      interval={
+                        chartGranularity === "day"
+                          ? Math.max(1, Math.ceil(chartDataDaily.length / 28))
+                          : "preserveStartEnd"
+                      }
+                      tick={{ fontSize: 12 }}
+                    />
                     <YAxis />
                     <Tooltip />
                     <Line type="monotone" dataKey="inventory" stroke="#16a34a" strokeWidth={2} dot={false} name="재고" />
