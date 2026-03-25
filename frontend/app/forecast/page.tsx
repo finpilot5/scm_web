@@ -234,6 +234,10 @@ export default function ForecastPage() {
     [scheduleRows]
   );
 
+  const shortageRows = useMemo(() => {
+    return scheduleRows.filter((r) => r.projectedInventory < safetyStock);
+  }, [scheduleRows, safetyStock]);
+
   const calendarTodos = useMemo<CalendarTodo[]>(() => {
     if (!selectedProduct) return [];
     const rows: CalendarTodo[] = [];
@@ -438,6 +442,40 @@ export default function ForecastPage() {
           <p className="text-xs text-slate-500">원재료 발주 항목 수</p>
           <p className="text-2xl font-semibold">{materialOrders.length}</p>
         </div>
+      </div>
+
+      <div className="rounded-2xl border bg-white p-4 shadow-soft">
+        <h2 className="mb-2 text-lg font-semibold">재고 부족 시 생산 리드타임 일정</h2>
+        {shortageRows.length === 0 ? (
+          <div className="text-sm text-slate-600">안전재고 기준으로 재고 부족 구간이 없습니다.</div>
+        ) : (
+          <div className="grid gap-2 md:grid-cols-3">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
+              <div className="font-semibold text-slate-900">기준 안전재고</div>
+              <div className="mt-1 text-2xl">{safetyStock.toFixed(2)}</div>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
+              <div className="font-semibold text-slate-900">첫 부족 구간</div>
+              <div className="mt-1 text-sm">{shortageRows[0].label}</div>
+              <div className="mt-1 text-sm">판매기준일: {shortageRows[0].demandDate}</div>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
+              <div className="font-semibold text-slate-900">생산해야 하는 날짜(권장)</div>
+              <div className="mt-1 text-sm">생산일: {shortageRows[0].productionDate}</div>
+              <div className="mt-1 text-sm">생산량: {shortageRows[0].production.toFixed(2)}</div>
+              <div className="mt-1 text-sm">발주일: {shortageRows[0].orderDate}</div>
+            </div>
+          </div>
+        )}
+        {shortageRows.length > 1 ? (
+          <div className="mt-3 text-xs text-slate-600">
+            추가 부족 구간(최대 3개):{" "}
+            {shortageRows
+              .slice(0, 3)
+              .map((r) => `${r.label}(${r.productionDate})`)
+              .join(", ")}
+          </div>
+        ) : null}
       </div>
 
       <div className="rounded-2xl border bg-white p-4 shadow-soft">
