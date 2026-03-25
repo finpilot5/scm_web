@@ -46,7 +46,8 @@ function periodToHorizonWeeks(period: Period): number {
 export default function DashboardPage() {
   const [period, setPeriod] = useState<Period>("3M");
   const [productId, setProductId] = useState<string>("");
-  const [productionQty, setProductionQty] = useState<number>(100);
+  const [initialInventoryInput, setInitialInventoryInput] = useState<string>("100");
+  const [initialInventoryTouched, setInitialInventoryTouched] = useState(false);
   const [avgDailyUsageInput, setAvgDailyUsageInput] = useState<string>("10");
   const [allItems, setAllItems] = useState<Item[]>([]);
   const [data, setData] = useState<DashboardResponse | null>(null);
@@ -68,6 +69,17 @@ export default function DashboardPage() {
     return Number.isFinite(n) ? Math.max(0, n) : 0;
   }, [avgDailyUsageInput]);
 
+  const initialInventory = useMemo(() => {
+    const n = Number(initialInventoryInput);
+    return Number.isFinite(n) ? Math.max(0, n) : 0;
+  }, [initialInventoryInput]);
+
+  const productionQtyForDashboard = useMemo(() => {
+    const horizonWeeks = periodToHorizonWeeks(period);
+    const horizonDays = horizonWeeks * 7;
+    return Math.max(0, avgDailyUsage * horizonDays);
+  }, [period, avgDailyUsage]);
+
   useEffect(() => {
     checkApiHealth().then(setApiHealth);
     fetchItems().then((items) => {
@@ -79,8 +91,8 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!productId) return;
-    getDashboardData(period, productId, Math.max(0, productionQty)).then(setData);
-  }, [period, productId, productionQty]);
+    getDashboardData(period, productId, productionQtyForDashboard).then(setData);
+  }, [period, productId, productionQtyForDashboard]);
 
   useEffect(() => {
     fetchInventories()
@@ -94,6 +106,12 @@ export default function DashboardPage() {
       .filter((inv) => inv.item_id === selectedProduct.id)
       .reduce((acc, inv) => acc + Number(inv.qty || 0), 0);
   }, [inventories, selectedProduct]);
+
+  useEffect(() => {
+    // 사용자가 초깃값을 직접 수정하지 않았다면, 선택된 제품의 현재 재고 합계를 자동으로 채운다.
+    if (initialInventoryTouched) return;
+    setInitialInventoryInput(String(currentProductInventory));
+  }, [currentProductInventory, initialInventoryTouched]);
 
   useEffect(() => {
     if (!selectedProduct) return;
@@ -115,7 +133,7 @@ export default function DashboardPage() {
       product_id: selectedProduct.id,
       product_name: selectedProduct.name,
       start_date: scheduleStartISO,
-      current_inventory: currentProductInventory,
+      current_inventory: initialInventory,
       safety_stock,
       moq,
       production_leadtime_days,
@@ -126,7 +144,7 @@ export default function DashboardPage() {
       .then((out) => setSchedule(out))
       .catch(() => setSchedule(null))
       .finally(() => setScheduleLoading(false));
-  }, [period, selectedProduct, currentProductInventory, scheduleStartISO, avgDailyUsage]);
+  }, [period, selectedProduct, scheduleStartISO, avgDailyUsage, initialInventory]);
 
   const chartDataWeek = useMemo(() => {
     if (!schedule || !selectedProduct) return [];
@@ -245,11 +263,14 @@ export default function DashboardPage() {
             type="number"
             min={0}
             step="any"
-            value={productionQty}
-            onChange={(e) => setProductionQty(Number(e.target.value))}
+            value={initialInventoryInput}
+            onChange={(e) => {
+              setInitialInventoryTouched(true);
+              setInitialInventoryInput(e.target.value);
+            }}
             className="h-10 w-36 rounded-xl border border-slate-200 px-3 text-sm"
-            placeholder="생산계획(총)"
-            aria-label="생산계획(총)"
+            placeholder="초기재고"
+            aria-label="초기재고"
           />
           <input
             type="number"
@@ -277,9 +298,9 @@ export default function DashboardPage() {
           hint="선택 기간 내 부족 발생(권장 발주량 > 0)한 원재료 SKU 개수입니다."
         />
         <KpiStatCard
-          title="생산 계획(입력)"
-          value={productionQty}
-          hint="대시보드에서 선택한 기간(3M/6M/12M) 동안 총 생산량(누적) 입력값입니다."
+          title="기간 총 수요(=생산계획)"
+          value={productionQtyForDashboard}
+          hint="일평균예상사용량 × 기간 일수(3M/6M/12M)를 계산한 값입니다."
         />
         <KpiStatCard
           title="권장 발주 수량(총)"
