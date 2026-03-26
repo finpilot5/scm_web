@@ -50,6 +50,7 @@
 1) 주차별 예상 수요 생성
 2) 필요 생산량 계산
    - need = forecast + safety_stock - on_hand
+   - on_hand는 (기초재고 + 수불 IN - 수불 OUT) 누적으로 산출된 값 기준
 3) 생산 CAPA 반영
    - cap 초과분은 다음 주 이월
 4) 자재 소요량 계산(BOM 전개)
@@ -61,12 +62,13 @@
 
 ### 4.3 소비기한/FIFO 반영
 - 출고 시 만료 임박 lot 우선 소비
+- FIFO lot 소진의 입력소스: 월간 수불 원장 OUT(출고) 라인/로트/소비기한 정보
 - 만료 임계치(예: 14일) 이하 알림 이벤트 생성
 
 ---
 
 ## 5. API 설계 (MVP+)
-- `POST /api/scm/generate-52w` : 52주 계획 생성
+- `POST /api/calculate-52w` : 52주 계획 생성
 - `GET /api/scm-calendar` : To-Do 일정 조회
 - `POST /api/scm-calendar/ack` : 일정 확인/완료 처리
 - 기존 CRUD API(items, boms, inventories, production-plans, purchase-orders) 활용
