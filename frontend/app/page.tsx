@@ -14,7 +14,6 @@ import {
 } from "recharts";
 
 import { InventoryRequiredChart } from "@/components/InventoryRequiredChart";
-import { KpiStatCard } from "@/components/KpiStatCard";
 import { PeriodToggle } from "@/components/PeriodToggle";
 import { ProcurementForecastChart } from "@/components/ProcurementForecastChart";
 import { ProductFilter } from "@/components/ProductFilter";
@@ -334,37 +333,6 @@ export default function DashboardPage() {
             />
           </label>
         </div>
-      </section>
-
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-5">
-        <KpiStatCard
-          title="예상 발주비(추정)"
-          value={data ? Math.round(data.kpis.estimatedProcurementCost).toLocaleString() : "-"}
-          hint="BOM 기반 권장 발주수량 × 단가(백엔드 계산 결과)를 합산한 값입니다."
-        />
-        <KpiStatCard
-          title="리스크 SKU(원재료)"
-          value={data?.kpis.totalShortageMaterials ?? "-"}
-          tone="danger"
-          hint="선택 기간 내 부족 발생(권장 발주량 > 0)한 원재료 SKU 개수입니다."
-        />
-        <KpiStatCard
-          title="기간 총 수요(=생산계획)"
-          value={productionQtyForDashboard}
-          hint="일평균예상사용량 × 기간 일수(3M/6M/12M)를 계산한 값입니다."
-        />
-        <KpiStatCard
-          title="권장 발주 수량(총)"
-          value={data?.kpis.totalRequiredProcurementQty ? data.kpis.totalRequiredProcurementQty.toFixed(2) : "-"}
-          tone="warning"
-          hint="선택 기간 동안 BOM 전개 후, 현재 재고 대비 부족분을 합산한 권장 발주량입니다."
-        />
-        <KpiStatCard
-          title="소비기한 임박(예정)"
-          value={"-"}
-          tone="warning"
-          hint="MVP에서는 소비기한 기반 경고 기능이 아직 연동되지 않았습니다."
-        />
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
