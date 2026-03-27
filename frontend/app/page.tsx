@@ -57,6 +57,7 @@ export default function DashboardPage() {
   const [scheduleLoading, setScheduleLoading] = useState(false);
   const [chartGranularity, setChartGranularity] = useState<"week" | "day">("week");
   const scheduleStartISO = useMemo(() => todayISO(), []);
+  const horizonWeeks = useMemo(() => periodToHorizonWeeks(period), [period]);
 
   const productItems = useMemo(() => allItems.filter((i) => i.type === "PRODUCT"), [allItems]);
   const selectedProduct = useMemo(
@@ -75,10 +76,9 @@ export default function DashboardPage() {
   }, [initialInventoryInput]);
 
   const productionQtyForDashboard = useMemo(() => {
-    const horizonWeeks = periodToHorizonWeeks(period);
     const horizonDays = horizonWeeks * 7;
     return Math.max(0, avgDailyUsage * horizonDays);
-  }, [period, avgDailyUsage]);
+  }, [horizonWeeks, avgDailyUsage]);
 
   useEffect(() => {
     checkApiHealth().then(setApiHealth);
@@ -144,7 +144,7 @@ export default function DashboardPage() {
       .then((out) => setSchedule(out))
       .catch(() => setSchedule(null))
       .finally(() => setScheduleLoading(false));
-  }, [period, selectedProduct, scheduleStartISO, avgDailyUsage, initialInventory]);
+  }, [period, selectedProduct, scheduleStartISO, avgDailyUsage, initialInventory, horizonWeeks]);
 
   const chartDataWeek = useMemo(() => {
     if (!schedule || !selectedProduct) return [];
@@ -368,15 +368,23 @@ export default function DashboardPage() {
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={chartData}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis
-                      dataKey={chartGranularity === "week" ? "week" : "date"}
-                      interval={
-                        chartGranularity === "day"
-                          ? Math.max(1, Math.ceil(chartDataDaily.length / 28))
-                          : "preserveStartEnd"
-                      }
-                      tick={{ fontSize: 12 }}
-                    />
+                    {chartGranularity === "week" ? (
+                      <XAxis
+                        dataKey="week"
+                        type="number"
+                        domain={[1, horizonWeeks]}
+                        allowDecimals={false}
+                        tick={{ fontSize: 12 }}
+                        interval="preserveStartEnd"
+                      />
+                    ) : (
+                      <XAxis
+                        dataKey="date"
+                        type="category"
+                        interval={Math.max(1, Math.ceil(chartDataDaily.length / 28))}
+                        tick={{ fontSize: 12 }}
+                      />
+                    )}
                     <YAxis />
                     <Tooltip />
                     <Line type="monotone" dataKey="inventory" stroke="#16a34a" strokeWidth={2} dot={false} name="재고" />
