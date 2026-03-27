@@ -46,6 +46,7 @@ function periodToHorizonWeeks(period: Period): number {
 export default function DashboardPage() {
   const [period, setPeriod] = useState<Period>("3M");
   const [productId, setProductId] = useState<string>("");
+  const [overviewQuery, setOverviewQuery] = useState("");
   const [initialInventoryInput, setInitialInventoryInput] = useState<string>("100");
   const [initialInventoryTouched, setInitialInventoryTouched] = useState(false);
   const [avgDailyUsageInput, setAvgDailyUsageInput] = useState<string>("10");
@@ -79,6 +80,50 @@ export default function DashboardPage() {
     const horizonDays = horizonWeeks * 7;
     return Math.max(0, avgDailyUsage * horizonDays);
   }, [horizonWeeks, avgDailyUsage]);
+
+  const stockByItemId = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const inv of inventories) {
+      map.set(inv.item_id, (map.get(inv.item_id) ?? 0) + Number(inv.qty || 0));
+    }
+    return map;
+  }, [inventories]);
+
+  const productOverviewRows = useMemo(() => {
+    const horizonDays = horizonWeeks * 7;
+    const expectedUsage = Math.max(0, avgDailyUsage * horizonDays);
+    const q = overviewQuery.trim().toLowerCase();
+
+    return productItems
+      .map((p) => {
+        const currentStock = stockByItemId.get(p.id) ?? 0;
+        const safetyStock = Number(p.safety_stock_qty ?? 0);
+        const projectedEndingStock = currentStock - expectedUsage;
+        const shortageGap = Math.max(safetyStock - projectedEndingStock, 0);
+        const isRisk = shortageGap > 0;
+        return {
+          id: p.id,
+          code: p.code,
+          name: p.name,
+          uom: p.uom ?? "EA",
+          currentStock,
+          safetyStock,
+          expectedUsage,
+          projectedEndingStock,
+          shortageGap,
+          action: isRisk ? "발주/생산 필요" : "정상",
+          risk: isRisk,
+        };
+      })
+      .filter((row) => {
+        if (!q) return true;
+        return row.code.toLowerCase().includes(q) || row.name.toLowerCase().includes(q);
+      })
+      .sort((a, b) => {
+        if (a.risk !== b.risk) return a.risk ? -1 : 1;
+        return b.shortageGap - a.shortageGap;
+      });
+  }, [productItems, stockByItemId, horizonWeeks, avgDailyUsage, overviewQuery]);
 
   useEffect(() => {
     checkApiHealth().then(setApiHealth);
@@ -320,6 +365,68 @@ export default function DashboardPage() {
           tone="warning"
           hint="MVP에서는 소비기한 기반 경고 기능이 아직 연동되지 않았습니다."
         />
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-lg font-semibold">품목별 한눈에 보기 (엑셀형)</h2>
+          <input
+            type="text"
+            value={overviewQuery}
+            onChange={(e) => setOverviewQuery(e.target.value)}
+            placeholder="품목코드/품목명 검색"
+            className="h-9 w-56 rounded-lg border border-slate-200 px-3 text-sm"
+          />
+        </div>
+        <p className="mb-3 text-xs text-slate-600">
+          선택 기간({period}) 기준으로 품목별 현재재고/예상사용량/기말예상재고를 한 번에 확인합니다.
+        </p>
+        <div className="overflow-x-auto">
+          <table className="min-w-[980px] text-sm">
+            <thead className="sticky top-0 bg-slate-50 text-slate-600">
+              <tr>
+                <th className="border-b px-2 py-2 text-left">품목코드</th>
+                <th className="border-b px-2 py-2 text-left">품목명</th>
+                <th className="border-b px-2 py-2 text-right">현재재고</th>
+                <th className="border-b px-2 py-2 text-right">안전재고</th>
+                <th className="border-b px-2 py-2 text-right">기간 예상사용량</th>
+                <th className="border-b px-2 py-2 text-right">기말 예상재고</th>
+                <th className="border-b px-2 py-2 text-right">부족분</th>
+                <th className="border-b px-2 py-2 text-left">권장 액션</th>
+              </tr>
+            </thead>
+            <tbody>
+              {productOverviewRows.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-2 py-3 text-slate-500">
+                    표시할 품목이 없습니다.
+                  </td>
+                </tr>
+              ) : (
+                productOverviewRows.map((row) => (
+                  <tr key={row.id} className={`border-b ${row.risk ? "bg-red-50/30" : ""}`}>
+                    <td className="px-2 py-2">{row.code}</td>
+                    <td className="px-2 py-2">{row.name}</td>
+                    <td className="px-2 py-2 text-right">{row.currentStock.toFixed(2)}</td>
+                    <td className="px-2 py-2 text-right">{row.safetyStock.toFixed(2)}</td>
+                    <td className="px-2 py-2 text-right">{row.expectedUsage.toFixed(2)}</td>
+                    <td className="px-2 py-2 text-right">{row.projectedEndingStock.toFixed(2)}</td>
+                    <td className="px-2 py-2 text-right">{row.shortageGap.toFixed(2)}</td>
+                    <td className="px-2 py-2">
+                      <span
+                        className={`rounded-md px-2 py-1 text-xs font-semibold ${
+                          row.risk ? "bg-shortage text-white" : "bg-safe text-white"
+                        }`}
+                      >
+                        {row.action}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
