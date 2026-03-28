@@ -9,7 +9,8 @@ from core.database import Base, get_db
 from main import app
 
 
-SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
+# 파일 DB는 스키마 변경 시 컬럼 누락이 남을 수 있어 in-memory 사용
+SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
 
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}

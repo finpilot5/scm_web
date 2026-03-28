@@ -12,6 +12,20 @@ from schemas.stock_transaction import StockTransactionCreate, StockTransactionRe
 router = APIRouter(prefix="/api/stock-transactions", tags=["stock_transactions"])
 
 
+def _norm_lot(value: str | None) -> str | None:
+    if value is None:
+        return None
+    s = str(value).strip()
+    return s if s else None
+
+
+def _norm_optional_str(value: str | None) -> str | None:
+    if value is None:
+        return None
+    s = str(value).strip()
+    return s if s else None
+
+
 @router.get("", response_model=list[StockTransactionRead])
 def list_stock_transactions(db: Session = Depends(get_db)):
     return db.query(StockTransaction).all()
@@ -19,6 +33,11 @@ def list_stock_transactions(db: Session = Depends(get_db)):
 
 @router.post("", response_model=StockTransactionRead)
 def create_stock_transaction(payload: StockTransactionCreate, db: Session = Depends(get_db)):
+    biz_date = payload.as_of_date or date.today()
+    lot_no = _norm_lot(payload.lot_no)
+    unit = _norm_optional_str(payload.unit)
+    source_ref = _norm_optional_str(payload.source_ref)
+
     # 1) 입출고 이력 생성
     trx = StockTransaction(
         item_id=payload.item_id,
@@ -26,26 +45,37 @@ def create_stock_transaction(payload: StockTransactionCreate, db: Session = Depe
         trx_type=payload.trx_type,
         qty=payload.qty,
         reason=payload.reason,
+        as_of_date=biz_date,
+        lot_no=lot_no,
+        expiry_date=payload.expiry_date,
+        unit=unit,
+        source_ref=source_ref,
     )
     db.add(trx)
 
-    # 2) 해당 품목/창고/오늘 기준 재고 스냅샷 업데이트
-    today = date.today()
-    inv = (
+    # 2) 품목/창고/기준일/(로트) 단위 재고 스냅샷 업데이트 — docs/수불_매핑.md
+    inv_q = (
         db.query(Inventory)
         .filter(
             Inventory.item_id == payload.item_id,
             Inventory.warehouse_id == payload.warehouse_id,
-            Inventory.as_of_date == today,
+            Inventory.as_of_date == biz_date,
         )
-        .first()
     )
+    if lot_no is None:
+        inv_q = inv_q.filter(Inventory.lot_no.is_(None))
+    else:
+        inv_q = inv_q.filter(Inventory.lot_no == lot_no)
+    inv = inv_q.first()
+
     if not inv:
         inv = Inventory(
             item_id=payload.item_id,
             warehouse_id=payload.warehouse_id,
             qty=0,
-            as_of_date=today,
+            as_of_date=biz_date,
+            lot_no=lot_no,
+            expiry_date=payload.expiry_date if payload.trx_type == "IN" else None,
         )
         db.add(inv)
 
@@ -57,6 +87,8 @@ def create_stock_transaction(payload: StockTransactionCreate, db: Session = Depe
             detail="입출고 후 재고가 음수가 될 수 없습니다.",
         )
     inv.qty = new_qty
+    if payload.expiry_date is not None and payload.trx_type == "IN":
+        inv.expiry_date = payload.expiry_date
 
     db.commit()
     db.refresh(trx)
@@ -69,4 +101,3 @@ def get_stock_transaction(trx_id: int, db: Session = Depends(get_db)):
     if not trx:
         raise HTTPException(status_code=404, detail="입출고 이력을 찾을 수 없습니다.")
     return trx
-

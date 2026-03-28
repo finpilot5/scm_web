@@ -600,6 +600,11 @@ export async function createStockTransaction(input: {
   trx_type: string;
   qty: number;
   reason?: string | null;
+  as_of_date?: string | null;
+  lot_no?: string | null;
+  expiry_date?: string | null;
+  unit?: string | null;
+  source_ref?: string | null;
 }): Promise<StockTransactionRecord> {
   const res = await apiFetch(`${API_BASE_URL}/api/stock-transactions`, {
     method: "POST",
@@ -610,6 +615,11 @@ export async function createStockTransaction(input: {
       trx_type: input.trx_type,
       qty: input.qty,
       reason: input.reason ?? null,
+      as_of_date: input.as_of_date ?? null,
+      lot_no: input.lot_no ?? null,
+      expiry_date: input.expiry_date ?? null,
+      unit: input.unit ?? null,
+      source_ref: input.source_ref ?? null,
     }),
   });
   if (!res.ok) throw new Error(await parseError(res));

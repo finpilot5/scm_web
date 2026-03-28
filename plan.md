@@ -34,22 +34,24 @@
 
 ## M2 — 원장 스키마
 
-- [ ] DB 모델에 `as_of_date`, `lot_no`, `expiry_date`, `unit`, `source_ref` (필요 시 `external_row_id`) 추가 설계.
-- [ ] Alembic 또는 기존 마이그레이션 방식으로 스키마 반영.
-- [ ] Pydantic 스키마·`POST/GET` 응답 필드 정리.
-- [ ] 기존 `backend/tests/test_stock_transaction.py` 및 연관 테스트 수정·보강.
+- [x] DB 모델에 `as_of_date`, `lot_no`, `expiry_date`, `unit`, `source_ref` 추가.
+- [x] `main.py` startup `ALTER` + `migrations/002_stock_transaction_ledger.sql` (Postgres 수동).
+- [x] Pydantic 스키마·`POST/GET` 응답 필드 정리 (`StockTransactionRead`에서 레거시 `as_of_date` NULL 시 `trx_time` 날짜로 보정).
+- [x] `backend/tests/test_stock_transaction.py` 보강·`conftest` in-memory DB.
+- [x] 프론트 `StockTransactionRecord`·`/ledger` 폼·표.
 
-**완료 기준**: 마이그레이션 적용 후 테스트 그린, API 문서 또는 타입과 일치.
+**완료 기준**: 마이그레이션 적용 후 테스트 그린, API 문서 또는 타입과 일치.  
+*(로컬에서 `pip install -r requirements-dev.txt` 후 `pytest` 권장.)*
 
 ---
 
 ## M3 — 원장→재고 반영
 
-- [ ] M1 정책에 맞게 `create_stock_transaction`(또는 후속 서비스)에서 **Inventory** 갱신 로직 변경.
-- [ ] “오늘만”이 아닌 경우 **동일 품목·창고·일자·(로트)** 키 규칙 명확화.
-- [ ] 음수 재고·경계 케이스 테스트 추가.
+- [x] `create_stock_transaction`에서 **Inventory** 키를 `(item_id, warehouse_id, as_of_date, lot_no)` 로 갱신 (M2에 함께 반영).
+- [x] 동일 품목·창고·일자·로트 버킷 규칙.
+- [x] `test_stock_transaction_respects_as_of_date_and_lot` 추가.
 
-**완료 기준**: 정책 문서와 동작이 일치하고 pytest 통과.
+**남음 (후속)**: 과거일 입력 후 **이후 일자 잔고 roll-forward** 자동 재계산은 M6 옵션.
 
 ---
 
@@ -105,8 +107,8 @@
 | 마일스톤 | 상태 | 메모 |
 | --- | --- | --- |
 | M1 | DONE | `docs/수불_매핑.md` |
-| M2 | TODO | |
-| M3 | TODO | |
+| M2 | DONE | 스키마·API·프론트·마이그레이션 SQL |
+| M3 | DONE | 재고 키 일반화 (roll-forward 제외) |
 | M4 | TODO | |
 | M5 | TODO | |
 | M6 | TODO | |

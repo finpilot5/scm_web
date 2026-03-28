@@ -15,6 +15,14 @@ import type { Item, StockTransactionRecord, Warehouse } from "@/lib/types";
 const inputClass =
   "h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 shadow-soft outline-none focus:border-stock";
 
+function todayISODate(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 function resolveItemId(code: string, items: Item[]): number | null {
   const c = code.trim();
   if (!c) return null;
@@ -91,6 +99,13 @@ export default function LedgerPage() {
     const trx_type = String(fd.get("trx_type") || "IN").toUpperCase();
     const qty = Number(fd.get("qty"));
     const reason = String(fd.get("reason") || "").trim() || null;
+    const as_of_raw = String(fd.get("as_of_date") || "").trim();
+    const as_of_date = as_of_raw || null;
+    const lot_no = String(fd.get("lot_no") || "").trim() || null;
+    const expiry_raw = String(fd.get("expiry_date") || "").trim();
+    const expiry_date = expiry_raw || null;
+    const unit = String(fd.get("unit") || "").trim() || null;
+    const source_ref = String(fd.get("source_ref") || "").trim() || null;
     if (!item_id || !Number.isFinite(qty) || qty <= 0) {
       setMessage({ type: "err", text: "품목·수량을 확인하세요." });
       return;
@@ -100,8 +115,22 @@ export default function LedgerPage() {
       return;
     }
     try {
-      await createStockTransaction({ item_id, warehouse_id, trx_type, qty, reason });
-      setMessage({ type: "ok", text: "수불이 등록되었습니다. 당일 재고 스냅샷이 함께 반영됩니다." });
+      await createStockTransaction({
+        item_id,
+        warehouse_id,
+        trx_type,
+        qty,
+        reason,
+        as_of_date,
+        lot_no,
+        expiry_date,
+        unit,
+        source_ref,
+      });
+      setMessage({
+        type: "ok",
+        text: "수불이 등록되었습니다. 기준일·로트(있는 경우)에 맞춰 재고 스냅샷이 갱신됩니다.",
+      });
       await load();
     } catch (err) {
       setMessage({
@@ -176,8 +205,8 @@ export default function LedgerPage() {
         <p className="mt-1 text-sm text-slate-600">
           <code className="rounded bg-slate-100 px-1">5월 수불.xlsx</code>의 <strong>재고DB</strong>·
           <strong>출고량</strong>·완제품/원재료 분석 시트와 동일한 데이터 축을 웹에서 다루기 위한{" "}
-          <strong>입출고 원장</strong>입니다. 등록 시 서버가 <strong>당일 기준 재고 스냅샷</strong>을
-          함께 갱신합니다.
+          <strong>입출고 원장</strong>입니다. 등록 시 서버가{" "}
+          <strong>기준일(as_of_date)·창고·로트(선택)</strong> 단위로 재고 스냅샷을 갱신합니다.
         </p>
         <p className="mt-2 text-xs text-slate-500">
           엑셀의 &quot;출고량&quot; 시트처럼 일자별 컬럼이 피벗된 형식은 이 화면에서 직접 읽지 않습니다.
@@ -243,12 +272,29 @@ export default function LedgerPage() {
             <input name="qty" type="number" className={inputClass} step="any" min={0.0001} required />
           </label>
           <label className="block text-sm">
-            <span className="text-slate-600">비고 (로트·소비기한·채널 등)</span>
-            <input
-              name="reason"
-              className={inputClass}
-              placeholder="예: Lot:A01-2503 | 소비기한:2025-09-24 | FC"
-            />
+            <span className="text-slate-600">거래 기준일 (as_of_date)</span>
+            <input name="as_of_date" type="date" className={inputClass} defaultValue={todayISODate()} />
+            <span className="mt-0.5 block text-xs text-slate-500">비우면 서버가 당일로 저장합니다.</span>
+          </label>
+          <label className="block text-sm">
+            <span className="text-slate-600">Lot / 로케이션</span>
+            <input name="lot_no" className={inputClass} placeholder="예: A01-2503" />
+          </label>
+          <label className="block text-sm">
+            <span className="text-slate-600">소비기한 (입고 시 권장)</span>
+            <input name="expiry_date" type="date" className={inputClass} />
+          </label>
+          <label className="block text-sm">
+            <span className="text-slate-600">단위 (선택)</span>
+            <input name="unit" className={inputClass} placeholder="EA, 개 …" />
+          </label>
+          <label className="block text-sm">
+            <span className="text-slate-600">출처 참조 (source_ref)</span>
+            <input name="source_ref" className={inputClass} placeholder="엑셀 시트·행, BL 등" />
+          </label>
+          <label className="block text-sm">
+            <span className="text-slate-600">비고</span>
+            <input name="reason" className={inputClass} placeholder="기타 메모" />
           </label>
           <button
             type="submit"
@@ -307,10 +353,14 @@ export default function LedgerPage() {
               <thead className="sticky top-0 bg-slate-50 text-slate-600">
                 <tr>
                   <th className="p-2">시각</th>
+                  <th className="p-2">기준일</th>
                   <th className="p-2">구분</th>
                   <th className="p-2">품목</th>
                   <th className="p-2">거점</th>
+                  <th className="p-2">Lot</th>
                   <th className="p-2">수량</th>
+                  <th className="p-2">단위</th>
+                  <th className="p-2">출처</th>
                   <th className="p-2">비고</th>
                 </tr>
               </thead>
@@ -323,12 +373,20 @@ export default function LedgerPage() {
                       <td className="whitespace-nowrap p-2 text-slate-600">
                         {new Date(t.trx_time).toLocaleString("ko-KR")}
                       </td>
+                      <td className="whitespace-nowrap p-2 text-slate-600">
+                        {t.as_of_date ?? "—"}
+                      </td>
                       <td className="p-2 font-medium">{t.trx_type}</td>
                       <td className="p-2">
                         {it ? `[${it.code}] ${it.name}` : t.item_id}
                       </td>
                       <td className="p-2">{wh ? `[${wh.code}] ${wh.name}` : t.warehouse_id}</td>
+                      <td className="p-2 text-slate-600">{t.lot_no ?? "—"}</td>
                       <td className="p-2">{t.qty}</td>
+                      <td className="p-2 text-slate-600">{t.unit ?? "—"}</td>
+                      <td className="p-2 max-w-[140px] truncate text-slate-600" title={t.source_ref ?? ""}>
+                        {t.source_ref ?? "—"}
+                      </td>
                       <td className="p-2 text-slate-600">{t.reason ?? "—"}</td>
                     </tr>
                   );

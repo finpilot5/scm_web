@@ -3,6 +3,7 @@
 - 테이블과 인덱스는 `Base.metadata.create_all(bind=engine)`를 통해 생성된다.
 - 컬럼 정의에서 `primary_key=True`, `index=True`, `unique=True`로 설정된 부분이 실제 인덱스로 반영된다.
 - 운영 환경에서는 Alembic 등을 사용해 마이그레이션을 관리하는 것을 권장한다.
+- Postgres 수동 반영: `migrations/002_stock_transaction_ledger.sql` (원장 컬럼 확장). SQLite·로컬은 `main.py` startup의 `ALTER`로도 추가된다.
 
 ## 기본 마스터 데이터 세팅
 

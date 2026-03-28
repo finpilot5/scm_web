@@ -124,6 +124,11 @@ export type StockTransactionRecord = {
   qty: number;
   reason: string | null;
   trx_time: string;
+  as_of_date: string | null;
+  lot_no: string | null;
+  expiry_date: string | null;
+  unit: string | null;
+  source_ref: string | null;
 };
 
 export type ProductionPlanRecord = {

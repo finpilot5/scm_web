@@ -67,6 +67,7 @@ def on_startup():
         item_cols = {c["name"] for c in insp.get_columns("item")}
         warehouse_cols = {c["name"] for c in insp.get_columns("warehouse")}
         inv_cols = {c["name"] for c in insp.get_columns("inventory")}
+        stk_cols = {c["name"] for c in insp.get_columns("stock_transaction")}
 
         alters: list[str] = []
         if "unit_price" not in item_cols:
@@ -87,11 +88,44 @@ def on_startup():
             alters.append("ALTER TABLE inventory ADD COLUMN lot_no VARCHAR")
         if "expiry_date" not in inv_cols:
             alters.append("ALTER TABLE inventory ADD COLUMN expiry_date DATE")
+        if "as_of_date" not in stk_cols:
+            alters.append("ALTER TABLE stock_transaction ADD COLUMN as_of_date DATE")
+        if "lot_no" not in stk_cols:
+            alters.append("ALTER TABLE stock_transaction ADD COLUMN lot_no VARCHAR")
+        if "expiry_date" not in stk_cols:
+            alters.append("ALTER TABLE stock_transaction ADD COLUMN expiry_date DATE")
+        if "unit" not in stk_cols:
+            alters.append("ALTER TABLE stock_transaction ADD COLUMN unit VARCHAR")
+        if "source_ref" not in stk_cols:
+            alters.append("ALTER TABLE stock_transaction ADD COLUMN source_ref VARCHAR")
 
         if alters:
             with engine.begin() as conn:
                 for q in alters:
                     conn.execute(text(q))
+
+        # stock_transaction.as_of_date 백필 (레거시 행) — ALTER 이후 컬럼 목록 재조회
+        try:
+            insp2 = inspect(engine)
+            stk_after = {c["name"] for c in insp2.get_columns("stock_transaction")}
+            if "as_of_date" in stk_after:
+                with engine.begin() as conn:
+                    if engine.dialect.name == "postgresql":
+                        conn.execute(
+                            text(
+                                "UPDATE stock_transaction SET as_of_date = "
+                                "(trx_time AT TIME ZONE 'UTC')::date WHERE as_of_date IS NULL"
+                            )
+                        )
+                    else:
+                        conn.execute(
+                            text(
+                                "UPDATE stock_transaction SET as_of_date = date(trx_time) "
+                                "WHERE as_of_date IS NULL"
+                            )
+                        )
+        except Exception:
+            pass
     except Exception:
         pass
 

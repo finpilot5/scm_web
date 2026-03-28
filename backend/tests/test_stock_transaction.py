@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
 
@@ -103,4 +103,103 @@ def test_stock_transaction_prevents_negative_inventory(db_session: Session, clie
         },
     )
     assert resp.status_code == 400
+
+
+def test_stock_transaction_respects_as_of_date_and_lot(db_session: Session, client) -> None:
+    """as_of_date·lot_no별로 inventory 행이 분리되는지 검증."""
+    item = Item(
+        code="STK-DATE-LOT",
+        name="일자·로트 테스트",
+        type="RAW",
+        uom="EA",
+        safety_stock_qty=0,
+        lead_time_days=0,
+        is_active=True,
+    )
+    db_session.add(item)
+    db_session.commit()
+    db_session.refresh(item)
+
+    d0 = date.today() - timedelta(days=3)
+    d1 = date.today() - timedelta(days=2)
+
+    assert (
+        client.post(
+            "/api/stock-transactions",
+            json={
+                "item_id": item.id,
+                "warehouse_id": 1,
+                "trx_type": "IN",
+                "qty": 10,
+                "as_of_date": d0.isoformat(),
+                "lot_no": "L-A",
+            },
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            "/api/stock-transactions",
+            json={
+                "item_id": item.id,
+                "warehouse_id": 1,
+                "trx_type": "IN",
+                "qty": 5,
+                "as_of_date": d0.isoformat(),
+                "lot_no": "L-B",
+            },
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            "/api/stock-transactions",
+            json={
+                "item_id": item.id,
+                "warehouse_id": 1,
+                "trx_type": "OUT",
+                "qty": 3,
+                "as_of_date": d0.isoformat(),
+                "lot_no": "L-A",
+            },
+        ).status_code
+        == 200
+    )
+
+    inv_la = (
+        db_session.query(Inventory)
+        .filter(
+            Inventory.item_id == item.id,
+            Inventory.warehouse_id == 1,
+            Inventory.as_of_date == d0,
+            Inventory.lot_no == "L-A",
+        )
+        .first()
+    )
+    inv_lb = (
+        db_session.query(Inventory)
+        .filter(
+            Inventory.item_id == item.id,
+            Inventory.warehouse_id == 1,
+            Inventory.as_of_date == d0,
+            Inventory.lot_no == "L-B",
+        )
+        .first()
+    )
+    assert inv_la is not None and float(inv_la.qty) == 7
+    assert inv_lb is not None and float(inv_lb.qty) == 5
+
+    # 다른 기준일에는 해당 로트 재고가 없으면 출고 실패
+    resp_bad = client.post(
+        "/api/stock-transactions",
+        json={
+            "item_id": item.id,
+            "warehouse_id": 1,
+            "trx_type": "OUT",
+            "qty": 1,
+            "as_of_date": d1.isoformat(),
+            "lot_no": "L-A",
+        },
+    )
+    assert resp_bad.status_code == 400
 

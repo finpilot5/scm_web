@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, Numeric, String
+from sqlalchemy import Column, Date, Integer, Numeric, String
 from sqlalchemy.sql import func
 from sqlalchemy.types import DateTime
 
@@ -15,4 +15,10 @@ class StockTransaction(Base):
     qty = Column(Numeric, nullable=False)
     reason = Column(String, nullable=True)
     trx_time = Column(DateTime(timezone=True), server_default=func.now())
+    # 원장(거래 기준일·로트) — docs/수불_매핑.md M2
+    as_of_date = Column(Date, nullable=True, index=True)
+    lot_no = Column(String, nullable=True, index=True)
+    expiry_date = Column(Date, nullable=True)
+    unit = Column(String, nullable=True)
+    source_ref = Column(String, nullable=True)
 

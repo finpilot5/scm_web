@@ -190,8 +190,20 @@ export type StockTransaction = {
   qty: number;
   reason: string | null;
   trx_time: string;
+  as_of_date?: string | null;
+  lot_no?: string | null;
+  expiry_date?: string | null;
+  unit?: string | null;
+  source_ref?: string | null;
 };
-export type StockTransactionCreateInput = Omit<StockTransaction, 'id' | 'trx_time'> & { reason?: string | null };
+export type StockTransactionCreateInput = Omit<StockTransaction, 'id' | 'trx_time'> & {
+  reason?: string | null;
+  as_of_date?: string | null;
+  lot_no?: string | null;
+  expiry_date?: string | null;
+  unit?: string | null;
+  source_ref?: string | null;
+};
 export async function fetchStockTransactions(): Promise<StockTransaction[]> {
   const res = await fetch(`${API_BASE_URL}/api/stock-transactions`, { headers: getAuthHeaders() });
   if (!res.ok) throw new Error('입출고 이력을 가져오지 못했습니다.');
