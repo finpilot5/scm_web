@@ -115,6 +115,17 @@ export type InventoryRecord = {
   expiry_date?: string | null;
 };
 
+/** GET/POST /api/stock-transactions — 엑셀 수불 원장의 IN/OUT 행에 대응 */
+export type StockTransactionRecord = {
+  id: number;
+  item_id: number;
+  warehouse_id: number;
+  trx_type: string;
+  qty: number;
+  reason: string | null;
+  trx_time: string;
+};
+
 export type ProductionPlanRecord = {
   id: number;
   item_id: number;

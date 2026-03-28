@@ -9,6 +9,7 @@ import {
   ItemCreatePayload,
   Period,
   ProductionPlanRecord,
+  StockTransactionRecord,
   Warehouse,
 } from "./types";
 
@@ -585,4 +586,32 @@ export async function createInventorySimple(input: {
     lot_no: input.lot_no ?? null,
     expiry_date: input.expiry_date ?? null,
   });
+}
+
+export async function fetchStockTransactions(): Promise<StockTransactionRecord[]> {
+  const res = await apiFetch(`${API_BASE_URL}/api/stock-transactions`, { cache: "no-store" });
+  if (!res.ok) throw new Error(await parseError(res));
+  return (await res.json()) as StockTransactionRecord[];
+}
+
+export async function createStockTransaction(input: {
+  item_id: number;
+  warehouse_id: number;
+  trx_type: string;
+  qty: number;
+  reason?: string | null;
+}): Promise<StockTransactionRecord> {
+  const res = await apiFetch(`${API_BASE_URL}/api/stock-transactions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      item_id: input.item_id,
+      warehouse_id: input.warehouse_id,
+      trx_type: input.trx_type,
+      qty: input.qty,
+      reason: input.reason ?? null,
+    }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return (await res.json()) as StockTransactionRecord;
 }
