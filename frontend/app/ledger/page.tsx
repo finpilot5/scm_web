@@ -8,9 +8,11 @@ import {
   fetchItems,
   fetchStockTransactions,
   fetchWarehouses,
+  importIssuancePivotExcel,
+  importWmsInventoryExcel,
 } from "@/lib/api";
 import { parseLedgerWorkbook } from "@/lib/ledgerExcel";
-import type { Item, StockTransactionRecord, Warehouse } from "@/lib/types";
+import type { ExcelImportResult, Item, StockTransactionRecord, Warehouse } from "@/lib/types";
 
 const inputClass =
   "h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 shadow-soft outline-none focus:border-stock";
@@ -48,6 +50,18 @@ function resolveWarehouseId(
   return w?.id ?? mainId;
 }
 
+function formatImportResult(r: ExcelImportResult): string {
+  const parts = [`시트「${r.sheet_used}」`, `스캔 행 ${r.rows_read}`];
+  if (r.transactions_created != null) parts.push(`OUT ${r.transactions_created}건`);
+  if (r.inventory_upserted != null) parts.push(`재고 upsert ${r.inventory_upserted}건`);
+  if (r.errors?.length) {
+    parts.push(
+      `오류 ${r.errors.length}건: ${r.errors.slice(0, 6).join("; ")}${r.errors.length > 6 ? "…" : ""}`
+    );
+  }
+  return parts.join(" · ");
+}
+
 export default function LedgerPage() {
   const [items, setItems] = useState<Item[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
@@ -56,6 +70,8 @@ export default function LedgerPage() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [uploadBusy, setUploadBusy] = useState(false);
+  const [pivotBusy, setPivotBusy] = useState(false);
+  const [wmsBusy, setWmsBusy] = useState(false);
 
   const itemById = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
   const whById = useMemo(() => new Map(warehouses.map((w) => [w.id, w])), [warehouses]);
@@ -198,6 +214,81 @@ export default function LedgerPage() {
     }
   };
 
+  const onPivotImport = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const el = e.currentTarget.elements.namedItem("pivot_file") as HTMLInputElement | null;
+    const f = el?.files?.[0];
+    if (!f) {
+      setMessage({ type: "err", text: "출고량 엑셀 파일을 선택하세요." });
+      return;
+    }
+    const fd = new FormData(e.currentTarget);
+    const whRaw = String(fd.get("pivot_warehouse_id") || "").trim();
+    const sheetRaw = String(fd.get("pivot_sheet") || "").trim();
+    const warehouseId = whRaw ? Number(whRaw) : undefined;
+    setPivotBusy(true);
+    setMessage(null);
+    try {
+      const r = await importIssuancePivotExcel(f, {
+        warehouseId: Number.isFinite(warehouseId) ? warehouseId : undefined,
+        sheetName: sheetRaw || undefined,
+      });
+      setMessage({
+        type: r.errors.length && (r.transactions_created ?? 0) === 0 ? "err" : "ok",
+        text: formatImportResult(r),
+      });
+      await load();
+    } catch (ex) {
+      setMessage({
+        type: "err",
+        text: ex instanceof Error ? ex.message : "출고량 import 실패",
+      });
+    } finally {
+      setPivotBusy(false);
+      if (el) el.value = "";
+    }
+  };
+
+  const onWmsImport = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const el = e.currentTarget.elements.namedItem("wms_file") as HTMLInputElement | null;
+    const f = el?.files?.[0];
+    if (!f) {
+      setMessage({ type: "err", text: "재고DB 엑셀 파일을 선택하세요." });
+      return;
+    }
+    const fd = new FormData(e.currentTarget);
+    const asOf = String(fd.get("wms_as_of_date") || "").trim();
+    if (!asOf) {
+      setMessage({ type: "err", text: "스냅샷 기준일을 입력하세요." });
+      return;
+    }
+    const sheetRaw = String(fd.get("wms_sheet") || "").trim();
+    const maxRaw = String(fd.get("wms_max_rows") || "").trim();
+    const maxRows = maxRaw ? Number(maxRaw) : undefined;
+    setWmsBusy(true);
+    setMessage(null);
+    try {
+      const r = await importWmsInventoryExcel(f, asOf, {
+        sheetName: sheetRaw || undefined,
+        maxRows: Number.isFinite(maxRows) ? maxRows : undefined,
+      });
+      setMessage({
+        type: r.errors.length && (r.inventory_upserted ?? 0) === 0 ? "err" : "ok",
+        text: formatImportResult(r),
+      });
+      await load();
+    } catch (ex) {
+      setMessage({
+        type: "err",
+        text: ex instanceof Error ? ex.message : "재고DB import 실패",
+      });
+    } finally {
+      setWmsBusy(false);
+      if (el) el.value = "";
+    }
+  };
+
   return (
     <div className="space-y-8">
       <div>
@@ -209,8 +300,8 @@ export default function LedgerPage() {
           <strong>기준일(as_of_date)·창고·로트(선택)</strong> 단위로 재고 스냅샷을 갱신합니다.
         </p>
         <p className="mt-2 text-xs text-slate-500">
-          엑셀의 &quot;출고량&quot; 시트처럼 일자별 컬럼이 피벗된 형식은 이 화면에서 직접 읽지 않습니다.
-          아래 템플릿 컬럼으로 시트를 만들어 업로드하거나, 수동으로 행을 등록하세요.
+          아래 <strong>출고량·재고DB</strong> 업로드는 <code className="rounded bg-slate-100 px-1">5월 수불.xlsx</code>{" "}
+          원본 형식을 그대로 사용합니다. 간이 템플릿(품목·구분·수량)은 우측 상단 폼을 쓰세요.
         </p>
       </div>
 
@@ -225,6 +316,98 @@ export default function LedgerPage() {
           {message.text}
         </div>
       )}
+
+      <section className="grid gap-8 lg:grid-cols-2">
+        <form
+          onSubmit={onPivotImport}
+          className="space-y-4 rounded-2xl border border-amber-200 bg-amber-50/40 p-6 shadow-soft"
+        >
+          <h2 className="text-lg font-medium text-slate-800">M4 · 출고량 시트 (피벗)</h2>
+          <p className="text-sm text-slate-600">
+            품목·일자별 수량 열을 읽어 <strong>OUT</strong> 원장을 쌓습니다. 창고는 기본{" "}
+            <strong>MAIN</strong> (또는 선택).
+          </p>
+          <input
+            name="pivot_file"
+            type="file"
+            accept=".xlsx,.xls"
+            className="block w-full text-sm text-slate-600"
+            required
+          />
+          <label className="block text-sm">
+            <span className="text-slate-600">창고 (선택)</span>
+            <select name="pivot_warehouse_id" className={inputClass} defaultValue="">
+              <option value="">MAIN / 기본</option>
+              {warehouses.map((w) => (
+                <option key={w.id} value={w.id}>
+                  [{w.code}] {w.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block text-sm">
+            <span className="text-slate-600">시트명 (선택)</span>
+            <input name="pivot_sheet" className={inputClass} placeholder="비우면 출고량 등 자동 탐색" />
+          </label>
+          <button
+            type="submit"
+            disabled={pivotBusy}
+            className="rounded-xl bg-amber-700 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+          >
+            {pivotBusy ? "처리 중…" : "출고량 import"}
+          </button>
+        </form>
+
+        <form
+          onSubmit={onWmsImport}
+          className="space-y-4 rounded-2xl border border-sky-200 bg-sky-50/40 p-6 shadow-soft"
+        >
+          <h2 className="text-lg font-medium text-slate-800">M5 · 재고DB 시트 (스냅샷)</h2>
+          <p className="text-sm text-slate-600">
+            물류센터·품목·셀명·<strong>가용수량(가장 오른쪽 열)</strong>을 읽어 해당 기준일 재고를{" "}
+            <strong>덮어씁니다</strong> (원장 미생성). 대량 행은 상한으로 잘립니다.
+          </p>
+          <input
+            name="wms_file"
+            type="file"
+            accept=".xlsx,.xls"
+            className="block w-full text-sm text-slate-600"
+            required
+          />
+          <label className="block text-sm">
+            <span className="text-slate-600">스냅샷 기준일</span>
+            <input
+              name="wms_as_of_date"
+              type="date"
+              className={inputClass}
+              defaultValue={todayISODate()}
+              required
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="text-slate-600">시트명 (선택)</span>
+            <input name="wms_sheet" className={inputClass} placeholder="비우면 재고DB 등 자동 탐색" />
+          </label>
+          <label className="block text-sm">
+            <span className="text-slate-600">최대 행 수</span>
+            <input
+              name="wms_max_rows"
+              type="number"
+              className={inputClass}
+              placeholder="100000"
+              min={1}
+              max={500000}
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={wmsBusy}
+            className="rounded-xl bg-sky-700 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+          >
+            {wmsBusy ? "처리 중…" : "재고DB import"}
+          </button>
+        </form>
+      </section>
 
       <section className="grid gap-8 lg:grid-cols-2">
         <form

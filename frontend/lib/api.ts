@@ -3,6 +3,7 @@ import {
   BomRecord,
   CalculateResponse,
   DashboardResponse,
+  ExcelImportResult,
   Generate52wResponse,
   InventoryRecord,
   Item,
@@ -624,4 +625,39 @@ export async function createStockTransaction(input: {
   });
   if (!res.ok) throw new Error(await parseError(res));
   return (await res.json()) as StockTransactionRecord;
+}
+
+export async function importIssuancePivotExcel(
+  file: File,
+  opts?: { warehouseId?: number; sheetName?: string }
+): Promise<ExcelImportResult> {
+  const fd = new FormData();
+  fd.append("file", file);
+  const q = new URLSearchParams();
+  if (opts?.warehouseId != null) q.set("warehouse_id", String(opts.warehouseId));
+  if (opts?.sheetName) q.set("sheet_name", opts.sheetName);
+  const qs = q.toString();
+  const url = `${API_BASE_URL}/api/imports/excel/issuance-pivot${qs ? `?${qs}` : ""}`;
+  const res = await apiFetch(url, { method: "POST", body: fd });
+  if (!res.ok) throw new Error(await parseError(res));
+  return (await res.json()) as ExcelImportResult;
+}
+
+export async function importWmsInventoryExcel(
+  file: File,
+  asOfDate: string,
+  opts?: { sheetName?: string; maxRows?: number }
+): Promise<ExcelImportResult> {
+  const fd = new FormData();
+  fd.append("file", file);
+  const q = new URLSearchParams();
+  q.set("as_of_date", asOfDate);
+  if (opts?.sheetName) q.set("sheet_name", opts.sheetName);
+  if (opts?.maxRows != null) q.set("max_rows", String(opts.maxRows));
+  const res = await apiFetch(`${API_BASE_URL}/api/imports/excel/wms-inventory?${q.toString()}`, {
+    method: "POST",
+    body: fd,
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return (await res.json()) as ExcelImportResult;
 }

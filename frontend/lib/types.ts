@@ -116,6 +116,16 @@ export type InventoryRecord = {
 };
 
 /** GET/POST /api/stock-transactions — 엑셀 수불 원장의 IN/OUT 행에 대응 */
+/** POST /api/imports/excel/* 응답 */
+export type ExcelImportResult = {
+  kind: string;
+  sheet_used: string;
+  rows_read: number;
+  transactions_created?: number;
+  inventory_upserted?: number;
+  errors: string[];
+};
+
 export type StockTransactionRecord = {
   id: number;
   item_id: number;

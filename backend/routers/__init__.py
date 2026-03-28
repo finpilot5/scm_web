@@ -7,6 +7,7 @@ from . import demand_forecast_router  # noqa: F401
 from . import production_plan_router  # noqa: F401
 from . import inventory_router  # noqa: F401
 from . import stock_transaction_router  # noqa: F401
+from . import import_excel_router  # noqa: F401
 from . import mrp_router  # noqa: F401
 from . import purchase_order_router  # noqa: F401
 from . import dashboard_router  # noqa: F401

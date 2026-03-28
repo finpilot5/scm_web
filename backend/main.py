@@ -10,6 +10,7 @@ from routers import (
     calculate_router,
     dashboard_router,
     demand_forecast_router,
+    import_excel_router,
     inventory_router,
     item_router,
     lead_time_router,
@@ -44,6 +45,7 @@ def create_app() -> FastAPI:
     app.include_router(production_plan_router.router)
     app.include_router(inventory_router.router)
     app.include_router(stock_transaction_router.router)
+    app.include_router(import_excel_router.router)
     app.include_router(mrp_router.router)
     app.include_router(purchase_order_router.router)
     app.include_router(dashboard_router.router)

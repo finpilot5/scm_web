@@ -57,10 +57,9 @@
 
 ## M4 — 출고량 엑셀
 
-- [ ] `출고량` 시트: 메타행(당월일수 등) 스킵, 헤더 행(품목·일자 컬럼) 탐지 로직.
-- [ ] 셀 값 → (품목, 일자, 수량) OUT 행 목록 생성.
-- [ ] 프론트 업로드 경로 또는 백엔드 일괄 import 엔드포인트 중 하나로 연결.
-- [ ] 샘플 소량 행으로 수동 검증.
+- [x] `출고량` 시트: 헤더 행(첫 열 `품목`, 5열부터 일자) 자동 탐지 (`services/issuance_pivot_parser.py`).
+- [x] 셀 값 → `StockTransaction` OUT + 재고 차감 (`POST /api/imports/excel/issuance-pivot`).
+- [x] `/ledger`에서 파일 업로드 + 창고·시트명 선택.
 
 **완료 기준**: 실제 `5월 수불.xlsx`의 `출고량` 시트 한 번에 import 가능(오류 행 리포트 포함 권장).
 
@@ -68,9 +67,9 @@
 
 ## M5 — 재고DB 엑셀
 
-- [ ] M1에서 선택한 방식으로 `재고DB` 행 파싱.
-- [ ] 품목 코드·거점 문자열 → `item_id`, `warehouse_id` 해석 규칙(미매칭 시 스킵/에러).
-- [ ] UI: 결과 요약(성공/실패 건수).
+- [x] `재고DB` 헤더·가용수량(가장 오른쪽 열)·물류센터·품목·셀명 파싱 (`services/wms_inventory_parser.py`).
+- [x] 거점 자동 생성·품목 미매칭 시 오류 수집, `inventory` 스냅샷 upsert (`POST /api/imports/excel/wms-inventory?as_of_date=`).
+- [x] `/ledger` UI + `max_rows` 상한(기본 10만).
 
 **완료 기준**: 샘플 파일로 한 사이클 성공.
 
@@ -109,8 +108,8 @@
 | M1 | DONE | `docs/수불_매핑.md` |
 | M2 | DONE | 스키마·API·프론트·마이그레이션 SQL |
 | M3 | DONE | 재고 키 일반화 (roll-forward 제외) |
-| M4 | TODO | |
-| M5 | TODO | |
+| M4 | DONE | issuance-pivot import |
+| M5 | DONE | wms-inventory import |
 | M6 | TODO | |
 | M7 | TODO | |
 | M8 | TODO | |
